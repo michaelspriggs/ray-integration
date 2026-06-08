@@ -1,8 +1,8 @@
-# ray-integration
+# Ray on LSF
 Ray provides a simple, universal API for building distributed applications, read more about ray [here](https://docs.ray.io/en/master/index.html).  
-Ray integration with LSF enables users to start up a Ray cluster on LSF and run DL workloads through that either in a batch or interactive mode.
+This repository demonstrates how to deploy Ray on LSF to run AI workloads.
 
-# Configuring Conda 
+## Configuring Conda 
 
 - Before you begin make sure you have conda install on your machine, details about installing conda on linux machine is [here](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html).  
 - For reference sample conda env yml is present [here](https://github.com/IBMSpectrumComputing/ray-integration/tree/main/sample_conda_env), to create sample conda env that will run GPU and CPU workloads run, it has mix of conda and pip dependencies:
@@ -16,7 +16,7 @@ Ray integration with LSF enables users to start up a Ray cluster on LSF and run 
     ray --version
     ray, version 1.4.0
     ```
- # Running ray as interactive LSF job
+ ## Running Ray as interactive job LSF
  
  - Run the below bsub command to get multiple GPUs (i.e. 2 GPUs in this example) on multiple nodes (i.e. 2 hosts in this example) from LSF scheduler with 20GB hardlimit on memory 
     ```
@@ -33,7 +33,7 @@ Ray integration with LSF enables users to start up a Ray cluster on LSF and run 
         -m is object store memory size in bytes as required by ray  
  
  
- # Acessing ray dashboard in interactive job mode:
+ ## Accessing the Ray dashboard in interactive job mode
  - Get ray head node and dashboard port, please find below log lines on the console
     ```
     Starting ray head node on:  ccc2-10
@@ -54,9 +54,9 @@ Ray integration with LSF enables users to start up a Ray cluster on LSF and run 
       http://127.0.0.1:3752
     ```
         
- # Running ray as a batch job
- - Run the below command to run ray as batch job
+ ## Running Ray as a batch job
+ - Run the following command to run Ray as batch job.
     ```
       bsub -o std%J.out -e std%J.out -M 20GB! -n 2 -R "span[ptile=1]" -gpu "num=2"  ./ray_launch_cluster.sh -c "python <full_path_of_sample_workload>/cifar_pytorch_example.py --use-gpu --num-workers 4 --num_epochs 5" -n "ray" -m 20000000000
     ```
--  To access the dashboard please refer to log file generated for batch job and perform port forwarding referring to commands described above.
+- To access the dashboard, refer to log file generated for the batch job and perform port forwarding referring to commands described above.
