@@ -1,0 +1,93 @@
+# Ray + vLLM Batch Inference Configuration
+# This configuration supports both CPU and GPU inference modes
+
+model:
+  # Model name from HuggingFace or local path
+  name: "meta-llama/Llama-2-7b-hf"
+  
+  # Tensor parallelism: number of GPUs per model instance
+  # Options: 1, 2, 4, 8, or "auto" to use all available GPUs per worker
+  tensor_parallel_size: 1
+  
+  # Maximum sequence length
+  max_model_len: 2048
+  
+  # Maximum number of sequences to process in parallel
+  max_num_seqs: 256
+  
+  # GPU memory utilization (0.0 to 1.0)
+  # Lower values leave more memory for KV cache
+  gpu_memory_utilization: 0.9
+  
+  # Quantization (optional): "awq", "gptq", or null for no quantization
+  quantization: null
+
+execution:
+  # Number of vLLM worker actors
+  # "auto" will create one actor per available GPU (or per tensor_parallel_size GPUs)
+  # For CPU mode, set to number of desired workers
+  num_workers: "auto"
+  
+  # Batch size for inference
+  batch_size: 16
+  
+  # Use GPU if available (set to false for CPU-only testing)
+  use_gpu: true
+  
+  # CPU-only mode (for testing without GPUs)
+  cpu_only: false
+  
+  # Maximum retries for failed tasks
+  max_retries: 3
+
+data:
+  # Input data path (JSONL format with "text" or "prompt" field)
+  input_path: "dataset/sample_prompts.jsonl"
+  
+  # Output path for results
+  output_path: "output/results.jsonl"
+  
+  # Maximum number of prompts to process (null for all)
+  max_prompts: null
+
+generation:
+  # Sampling temperature (0.0 = greedy, higher = more random)
+  temperature: 0.7
+  
+  # Top-p sampling
+  top_p: 0.9
+  
+  # Maximum tokens to generate
+  max_tokens: 512
+  
+  # Number of sequences to generate per prompt
+  n: 1
+  
+  # Stop sequences
+  stop: null
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  
+  # Enable progress bar
+  show_progress: true
+  
+  # Log interval (seconds)
+  log_interval: 10
+
+# LSF-specific settings (for documentation)
+lsf:
+  # Example CPU-only submission:
+  # bsub -n 8 -o output.%J ./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
+  
+  # Example GPU submission:
+  # bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./ray_launch_cluster.sh -n ray_gpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
+  
+  # Optional parameters:
+  # -q queue_name          # Specify queue
+  # -M 100GB               # Memory limit
+  # -W 2:00                # Wall time limit (hours:minutes)
+  # -R "rusage[mem=10GB]"  # Memory reservation per task
+
+# Made with Bob

@@ -1,62 +1,255 @@
 # Ray on LSF
-Ray provides a simple, universal API for building distributed applications, read more about Ray [here](https://docs.ray.io/en/master/index.html).  
-This repository demonstrates how to deploy Ray on LSF to run AI workloads.
 
-## Configuring Conda 
+Ray provides a simple, universal API for building distributed applications. Read more about Ray [here](https://docs.ray.io/).
 
-- Before you begin make sure you have conda install on your machine, details about installing conda on linux machine is [here](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html).  
-- For reference sample conda env yml is present [here](https://github.com/IBMSpectrumComputing/ray-integration/tree/main/sample_conda_env), to create sample conda env that will run GPU and CPU workloads run, it has mix of conda and pip dependencies:
-  ```
-  conda env create -f sample_conda_env/sample_ray_env.yml
-  ```
-- To test if you have ray installed with version number run:
-   ```
-    conda activate ray
-    pip install -U ray
-    ray --version
-    ray, version 1.4.0
-    ```
- ## Running Ray as interactive job LSF
- 
- - Run the below bsub command to get multiple GPUs (i.e. 2 GPUs in this example) on multiple nodes (i.e. 2 hosts in this example) from LSF scheduler with 20GB hardlimit on memory 
-    ```
-    bsub -Is -M 20GB! -n 2 -R "span[ptile=1]" -gpu "num=2" bash
-    ```
- - Sample workloads are present in sample_workload directory, sample_code_for_ray.py is CPU only workload and cifar_pytorch_example.py will work on CPU as well as GPU.
- - Start the script by running the following command:
-    ```
-    ./ray_launch_cluster.sh -c "python <full_path_of_sample_workload>/cifar_pytorch_example.py --use-gpu --num_epochs 5 --num-workers 4" -n "ray" -m 20000000000
-    ```
-    Where:  
-        -c is the user command that needs to be scaled under ray  
-        -n is the conda namespace that will be activate before the cluster is spawned  
-        -m is object store memory size in bytes as required by ray  
- 
- 
- ## Accessing the Ray dashboard in interactive job mode
- - Get ray head node and dashboard port, please find below log lines on the console
-    ```
-    Starting ray head node on:  ccc2-10
-    The size of object store memory in bytes is:  20000000000
-    2021-06-07 14:19:11,441 INFO services.py:1269 -- View the Ray dashboard at http://127.0.0.1:3752
-    ```
-    Where:  
-        - head node name: ccc2-10  
-        - dashboard port: 3752  
- - Run the below set of commands on the terminal to port forward dashboard from cluster to your local machine:
-    ```
-    export PORT=3752
-    export HEAD_NODE=ccc2-10.sl.cloud.ibm.com
-    ssh -L $PORT:localhost:$PORT -N -f -l <username> $HEAD_NODE
-    ```
- - Access the dashboard at your laptop on:
-    ```
-      http://127.0.0.1:3752
-    ```
-        
- ## Running Ray as a batch job
- - Run the following command to run Ray as batch job.
-    ```
-      bsub -o std%J.out -e std%J.out -M 20GB! -n 2 -R "span[ptile=1]" -gpu "num=2"  ./ray_launch_cluster.sh -c "python <full_path_of_sample_workload>/cifar_pytorch_example.py --use-gpu --num-workers 4 --num_epochs 5" -n "ray" -m 20000000000
-    ```
-- To access the dashboard, refer to log file generated for the batch job and perform port forwarding referring to commands described above.
+This repository demonstrates how to deploy **Ray 2.x** on LSF for AI workloads, including:
+- Distributed training
+- **Batch inference with vLLM** (NEW)
+- Flexible GPU allocation
+- Production-ready patterns
+
+## 🆕 What's New (2026 Update)
+
+This repository has been modernized with:
+- ✅ **Ray 2.40+** (upgraded from Ray 1.x)
+- ✅ **Python 3.11** (upgraded from Python 3.7)
+- ✅ **vLLM integration** for efficient LLM batch inference
+- ✅ **Simplified LSF patterns** (CPU-only and GPU with exclusive access)
+- ✅ **Flexible GPU allocation** (works with heterogeneous clusters)
+- ✅ **Production-ready reference architecture**
+
+## Quick Start
+
+### 1. Setup Environment
+
+Choose the appropriate environment for your use case:
+
+**For CPU-only testing:**
+```bash
+conda env create -f sample_conda_env/ray_2x_cpu.yml
+conda activate ray_cpu
+```
+
+**For GPU inference:**
+```bash
+conda env create -f sample_conda_env/ray_2x_gpu.yml
+conda activate ray_gpu
+```
+
+**Legacy environment (Ray 1.x):**
+```bash
+conda env create -f sample_conda_env/sample_ray_env.yml
+conda activate ray
+```
+
+### 2. Verify Installation
+
+```bash
+conda activate ray_gpu  # or ray_cpu
+python -c "import ray; print(f'Ray version: {ray.__version__}')"
+# Expected output: Ray version: 2.40.0
+```
+
+## 🚀 Batch Inference with vLLM (NEW)
+
+The `batch_inference/` directory contains a production-ready reference implementation for distributed LLM inference.
+
+### Quick Example - CPU Testing
+
+```bash
+bsub -n 4 -o output.%J \
+ ./ray_launch_cluster.sh \
+ -n ray_cpu \
+ -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" \
+ -m 10000000000
+```
+
+### Quick Example - GPU Inference
+
+```bash
+bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
+ ./ray_launch_cluster.sh \
+ -n ray_gpu \
+ -c "python batch_inference/batch_infer_vllm_actors.py" \
+ -m 20000000000
+```
+
+**See [batch_inference/README.md](batch_inference/README.md) for complete documentation.**
+
+## Standard LSF Submission Patterns
+
+### Pattern 1: CPU-Only (Development/Testing)
+
+```bash
+bsub -n 8 -o output.%J \
+ ./ray_launch_cluster.sh \
+ -n ray_cpu \
+ -c "python your_workload.py" \
+ -m 20000000000
+```
+
+**Use for:**
+- Development and testing
+- Small models (e.g., gpt2)
+- Debugging
+
+### Pattern 2: GPU with Exclusive Access (Production)
+
+```bash
+bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
+ ./ray_launch_cluster.sh \
+ -n ray_gpu \
+ -c "python your_workload.py" \
+ -m 20000000000
+```
+
+**Use for:**
+- Production workloads
+- GPU-accelerated inference
+- Large language models
+
+**Key features:**
+- `num=1/task`: One GPU per task
+- `j_exclusive=yes`: Exclusive GPU access (no sharing)
+- LSF automatically sets `CUDA_VISIBLE_DEVICES`
+- Ray auto-detects GPUs from environment
+
+### Optional LSF Parameters
+
+Customize resource requirements:
+
+```bash
+bsub -n 8 \
+ -gpu "num=1/task:j_exclusive=yes" \
+ -q gpu_queue \              # Specify queue
+ -M 100GB \                  # Memory limit
+ -W 2:00 \                   # Wall time (hours:minutes)
+ -R "rusage[mem=10GB]" \     # Memory reservation per task
+ -o output.%J \
+ ./ray_launch_cluster.sh -n ray_gpu -c "python your_workload.py" -m 20000000000
+```
+
+## Configuring Conda (Legacy)
+
+For the legacy Ray 1.x environment:
+
+```bash
+conda env create -f sample_conda_env/sample_ray_env.yml
+conda activate ray
+ray --version
+# Output: ray, version 1.4.0
+```
+
+**Note:** The legacy environment is provided for backward compatibility. New projects should use Ray 2.x environments.
+## Sample Workloads
+
+The `sample_workload/` directory contains example workloads:
+
+- **`sample_code_for_ray.py`**: Simple CPU-only Ray workload
+- **`cifar_pytorch_example.py`**: PyTorch training example (CPU and GPU)
+
+**Note:** These examples use Ray 1.x APIs. For Ray 2.x examples, see the `batch_inference/` directory.
+
+### Running Sample Workloads
+
+**CPU-only example:**
+```bash
+bsub -n 4 -o output.%J \
+  ./ray_launch_cluster.sh \
+  -n ray_cpu \
+  -c "python sample_workload/sample_code_for_ray.py" \
+  -m 10000000000
+```
+
+**GPU training example (legacy):**
+```bash
+bsub -n 4 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
+  ./ray_launch_cluster.sh \
+  -n ray \
+  -c "python sample_workload/cifar_pytorch_example.py --use-gpu --num-workers 4 --num_epochs 5" \
+  -m 20000000000
+```
+
+## Accessing the Ray Dashboard
+
+The Ray dashboard provides real-time monitoring of your cluster.
+
+### 1. Find Dashboard Information
+
+Check the job output for dashboard details:
+```
+Starting ray head node on: node-01
+View the Ray dashboard at http://127.0.0.1:8265
+```
+
+### 2. Port Forward from Head Node
+
+```bash
+export PORT=8265
+export HEAD_NODE=node-01.your-domain.com
+ssh -L $PORT:localhost:$PORT -N -f -l $USER $HEAD_NODE
+```
+
+### 3. Access Dashboard
+
+Open in your browser: `http://127.0.0.1:8265`
+
+## Migration from Ray 1.x to Ray 2.x
+
+If you have existing Ray 1.x code, here are the key changes:
+
+### API Changes
+
+| Ray 1.x | Ray 2.x |
+|---------|---------|
+| `ray.util.sgd.torch.TorchTrainer` | `ray.train.torch.TorchTrainer` |
+| `TrainingOperator` | `train_loop_per_worker` function |
+| `ray.util.sgd.utils` | `ray.train` |
+| `ray.get_runtime_context().node_id` | `ray.get_runtime_context().get_node_id()` |
+
+### Environment Changes
+
+- Python 3.7 → Python 3.10/3.11
+- PyTorch 1.8 → PyTorch 2.x
+- CUDA 10.2 → CUDA 11.8+
+
+See the [Ray 2.x migration guide](https://docs.ray.io/en/latest/ray-overview/migration-guide.html) for complete details.
+
+## Repository Structure
+
+```
+ray-integration/
+├── batch_inference/              # NEW: vLLM batch inference reference
+│   ├── README.md                 # Complete documentation
+│   ├── architecture.md           # Design rationale
+│   ├── config.yaml               # Configuration template
+│   ├── batch_infer_vllm_actors.py
+│   ├── batch_infer_ray_data.py
+│   ├── dataset/                  # Sample data
+│   └── run_batch_inference.sh
+├── sample_conda_env/
+│   ├── ray_2x_cpu.yml           # NEW: Ray 2.x CPU environment
+│   ├── ray_2x_gpu.yml           # NEW: Ray 2.x GPU environment
+│   └── sample_ray_env.yml       # Legacy: Ray 1.x environment
+├── sample_workload/
+│   ├── cifar_pytorch_example.py # Legacy: Ray 1.x training
+│   └── sample_code_for_ray.py   # Legacy: Ray 1.x example
+├── ray_launch_cluster.sh        # Updated for Ray 2.x
+└── README.md                     # This file
+```
+
+## Resources
+
+- **Ray Documentation**: https://docs.ray.io/
+- **vLLM Documentation**: https://docs.vllm.ai/
+- **LSF Documentation**: Check your cluster's documentation
+- **Batch Inference Guide**: See [batch_inference/README.md](batch_inference/README.md)
+- **Architecture Details**: See [batch_inference/architecture.md](batch_inference/architecture.md)
+
+## Contributing
+
+See [IBMDCO.md](IBMDCO.md) for contribution guidelines.
+
+## License
+
+See [LICENSE](LICENSE) file for details.
