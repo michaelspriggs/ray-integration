@@ -1,5 +1,5 @@
 # Ray on LSF
-Ray provides a simple, universal API for building distributed applications, read more about ray [here](https://docs.ray.io/en/master/index.html).  
+Ray provides a simple, universal API for building distributed applications, read more about Ray [here](https://docs.ray.io/en/master/index.html).  
 This repository demonstrates how to deploy Ray on LSF to run AI workloads.
 
 ## Configuring Conda 
