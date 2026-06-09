@@ -16,8 +16,8 @@ port = str(os.environ["port"])
 print(f"Connecting to Ray cluster at {head_node}:{port}")
 ray.init(address=f"{head_node}:{port}")
 
-# Small encoder model for CPU testing
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"  # 22M parameters, very fast on CPU
+# IBM Slate encoder model for CPU testing
+MODEL_NAME = "ibm/slate-30m-english-rtrvr"  # 30M parameters, IBM model
 
 @ray.remote
 class EncoderActor:

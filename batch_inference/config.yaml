@@ -3,7 +3,8 @@
 
 model:
   # Model name from HuggingFace or local path
-  name: "meta-llama/Llama-2-7b-hf"
+  # IBM Granite model for code generation and general tasks
+  name: "ibm-granite/granite-3b-code-instruct"
   
   # Tensor parallelism: number of GPUs per model instance
   # Options: 1, 2, 4, 8, or "auto" to use all available GPUs per worker

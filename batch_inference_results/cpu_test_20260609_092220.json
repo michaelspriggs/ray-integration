@@ -1,0 +1,74 @@
+{
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "timestamp": "2026-06-09T09:22:20.643907",
+  "num_actors": 2,
+  "num_batches": 10,
+  "batch_size": 5,
+  "total_texts": 50,
+  "total_time": 0.26210880279541016,
+  "overall_throughput": 190.76047605706572,
+  "avg_batch_throughput": 107.8044926413252,
+  "embedding_dim": 384,
+  "batch_results": [
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.08379960060119629,
+      "throughput": 59.66615549631417
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.08193397521972656,
+      "throughput": 61.02474567590847
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.04102683067321777,
+      "throughput": 121.87146601270346
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.042566537857055664,
+      "throughput": 117.46315889703534
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.039469003677368164,
+      "throughput": 126.68168775861548
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.04360461235046387,
+      "throughput": 114.66676873110214
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.0425562858581543,
+      "throughput": 117.49145629544971
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.04495835304260254,
+      "throughput": 111.21403836261527
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.04037952423095703,
+      "throughput": 123.82513403084481
+    },
+    {
+      "num_texts": 5,
+      "embedding_dim": 384,
+      "inference_time": 0.04027700424194336,
+      "throughput": 124.14031515266316
+    }
+  ]
+}
