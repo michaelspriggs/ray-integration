@@ -103,14 +103,14 @@ done
 
 head_node=${hosts[0]}
 
-# Resolve hostname to IP address for Ray
+# Resolve hostname to IPv4 address for Ray (filter out IPv6)
 # Use getent or host command to get IP, fallback to hostname if resolution fails
-head_node_ip=$(getent hosts $head_node | awk '{ print $1 }' | head -1)
+head_node_ip=$(getent hosts $head_node | awk '{ print $1 }' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
 if [ -z "$head_node_ip" ]; then
-    head_node_ip=$(host $head_node | awk '/has address/ { print $4 }' | head -1)
+    head_node_ip=$(host $head_node | awk '/has address/ { print $4 }' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
 fi
 if [ -z "$head_node_ip" ]; then
-    echo "WARNING: Could not resolve $head_node to IP, using hostname"
+    echo "WARNING: Could not resolve $head_node to IPv4 address, using hostname"
     head_node_ip=$head_node
 fi
 
