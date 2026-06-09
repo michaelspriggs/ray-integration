@@ -22,8 +22,9 @@ cat $LSB_DJOB_HOSTFILE
 echo "---- End of LSB_DJOB_HOSTFILE"
 echo ""
 
-# Use user specific temporary folder for multi-tenancy environment
-export RAY_TMPDIR="/tmp/ray-$USER"
+# Use user and job-specific temporary folder to avoid conflicts
+# when same user runs multiple Ray clusters
+export RAY_TMPDIR="/tmp/ray-$USER-$LSB_JOBID"
 echo "RAY_TMPDIR=$RAY_TMPDIR"
 mkdir -p $RAY_TMPDIR
 
