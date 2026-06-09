@@ -184,13 +184,13 @@ if [ $exit_code != 0 ]; then
     echo ""
     echo "ERROR: Workload failed with exit code: $exit_code"
     echo "Shutting down Ray cluster..."
-    ray stop --address $head_node:$port
+    ray stop
     exit $exit_code
 else
     echo ""
     echo "SUCCESS: Workload completed successfully"
     echo "Shutting down Ray cluster..."
-    ray stop --address $head_node:$port
+    ray stop
     echo "Job complete"
     bkill $LSB_JOBID
 fi
