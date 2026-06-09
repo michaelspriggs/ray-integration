@@ -1,6 +1,13 @@
 #!/bin/bash
 #Run Ray 2.x on LSF.
 #
+# Architecture:
+#   - One Ray process (head or worker) per host allocated by LSF
+#   - Each process uses the number of CPU cores allocated to that host
+#   - Core counts determined from LSB_DJOB_HOSTFILE (one line per core)
+#   - GPUs auto-detected via CUDA_VISIBLE_DEVICES set by LSF
+#   - All processes launched with blaunch for proper LSF tracking
+#
 #Examples:
 # CPU-only:
 #   bsub -n 8 -o output.%J ./ray_launch_cluster.sh -n ray_cpu -c "python workload.py" -m 20000000000
@@ -124,20 +131,32 @@ echo "Ray will auto-detect GPUs from CUDA_VISIBLE_DEVICES"
 echo "Head node CPUs: $num_cpu_for_head"
 
 # Ray 2.x command with updated flags
+# Note: If port is taken, Ray will fail and the status check will retry
 command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --num-cpus $num_cpu_for_head --object-store-memory $object_store_mem --include-dashboard true --dashboard-host 0.0.0.0"
 
+echo "Launching Ray head node..."
 $command_launch &
-
-
 
 sleep 20
 
+# Wait for Ray head to be ready (will fail if port is taken)
 command_check_up="ray status --address $head_node:$port"
+max_retries=10
+retry_count=0
 
 while ! $command_check_up
 do
+    retry_count=$((retry_count + 1))
+    if [ $retry_count -ge $max_retries ]; then
+        echo "ERROR: Ray head node failed to start after $max_retries attempts"
+        echo "This may be due to port $port being taken. Check 'ray status' output above."
+        exit 1
+    fi
+    echo "Waiting for Ray head node to be ready (attempt $retry_count/$max_retries)..."
     sleep 3
 done
+
+echo "Ray head node is ready!"
 
 
 
