@@ -30,14 +30,18 @@ dependencies:
     - ray[data]==2.40.0
     
     # Machine Learning frameworks (CPU versions)
-    - torch==2.2.0+cpu --index-url https://download.pytorch.org/whl/cpu
-    - torchvision==0.17.0+cpu --index-url https://download.pytorch.org/whl/cpu
+    # Note: Install PyTorch CPU separately after environment creation
+    # Run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    - torch==2.2.0
+    - torchvision==0.17.0
     
-    # LLM inference
-    - vllm-cpu==0.3.0
+    # LLM inference (CPU mode)
+    # Note: vLLM CPU support is limited. For CPU testing, use smaller models
+    # or consider using transformers directly
     - transformers==4.38.0
     - accelerate==0.27.0
     - tokenizers==0.15.0
+    - sentencepiece==0.1.99
     
     # Data handling
     - datasets==2.17.0

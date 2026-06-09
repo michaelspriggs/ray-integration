@@ -24,13 +24,19 @@ This repository has been modernized with:
 
 Choose the appropriate environment for your use case:
 
-**For CPU-only testing:**
+**For CPU-only testing (Recommended for development):**
 ```bash
+# Option A: Use the setup script (handles PyTorch CPU installation)
+cd sample_conda_env
+./setup_cpu_env.sh
+
+# Option B: Manual setup
 conda env create -f sample_conda_env/ray_2x_cpu.yml
 conda activate ray_cpu
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
-**For GPU inference:**
+**For GPU inference (Production):**
 ```bash
 conda env create -f sample_conda_env/ray_2x_gpu.yml
 conda activate ray_gpu
@@ -41,6 +47,8 @@ conda activate ray_gpu
 conda env create -f sample_conda_env/sample_ray_env.yml
 conda activate ray
 ```
+
+**Note:** See [sample_conda_env/README.md](sample_conda_env/README.md) for detailed setup instructions and troubleshooting.
 
 ### 2. Verify Installation
 
