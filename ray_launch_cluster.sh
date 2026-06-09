@@ -84,14 +84,6 @@ done
 
 echo "The host list is: ${hosts[@]}"
 
-port=$(getfreeport)
-echo "Head node will use port: $port"
-
-export port
-
-dashboard_port=$(getfreeport)
-echo "Dashboard will use port: $dashboard_port"
-
 # Compute number of cores allocated to hosts from LSB_DJOB_HOSTFILE
 # Each line in the file represents one slot (CPU core) allocated to a host
 declare -A associative
@@ -106,7 +98,7 @@ for host in ${!associative[@]}; do
     echo "host=$host cores=${associative[$host]}"
 done
 
-#Assumption only one head node and more than one 
+#Assumption only one head node and more than one
 #workers will connect to head node
 
 head_node=${hosts[0]}
@@ -130,33 +122,58 @@ num_cpu_for_head=${associative[$head_node]}
 echo "Ray will auto-detect GPUs from CUDA_VISIBLE_DEVICES"
 echo "Head node CPUs: $num_cpu_for_head"
 
-# Ray 2.x command with updated flags
-# Note: If port is taken, Ray will fail and the status check will retry
-command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --num-cpus $num_cpu_for_head --object-store-memory $object_store_mem --include-dashboard true --dashboard-host 0.0.0.0"
-
-echo "Launching Ray head node..."
-$command_launch &
-
-sleep 20
-
-# Wait for Ray head to be ready (will fail if port is taken)
-command_check_up="ray status --address $head_node:$port"
-max_retries=10
+# Retry loop for starting Ray head node with port selection
+max_retries=5
 retry_count=0
+ray_started=false
 
-while ! $command_check_up
-do
+while [ "$ray_started" = false ] && [ $retry_count -lt $max_retries ]; do
     retry_count=$((retry_count + 1))
-    if [ $retry_count -ge $max_retries ]; then
-        echo "ERROR: Ray head node failed to start after $max_retries attempts"
-        echo "This may be due to port $port being taken. Check 'ray status' output above."
-        exit 1
+    
+    # Select new ports for each attempt
+    port=$(getfreeport)
+    dashboard_port=$(getfreeport)
+    
+    echo "Attempt $retry_count/$max_retries: Trying port $port (dashboard: $dashboard_port)"
+    
+    # Ray 2.x command with updated flags
+    command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --num-cpus $num_cpu_for_head --object-store-memory $object_store_mem --include-dashboard true --dashboard-host 0.0.0.0"
+    
+    echo "Launching Ray head node..."
+    $command_launch &
+    
+    sleep 20
+    
+    # Check if Ray head is ready
+    command_check_up="ray status --address $head_node:$port"
+    check_attempts=0
+    max_check_attempts=3
+    
+    while [ $check_attempts -lt $max_check_attempts ]; do
+        if $command_check_up 2>/dev/null; then
+            echo "Ray head node is ready on port $port!"
+            ray_started=true
+            export port
+            break
+        fi
+        check_attempts=$((check_attempts + 1))
+        echo "Checking Ray status (attempt $check_attempts/$max_check_attempts)..."
+        sleep 3
+    done
+    
+    if [ "$ray_started" = false ]; then
+        echo "Failed to start Ray on port $port, will retry with new port..."
+        # Stop any partially started Ray processes
+        ray stop 2>/dev/null || true
+        sleep 5
     fi
-    echo "Waiting for Ray head node to be ready (attempt $retry_count/$max_retries)..."
-    sleep 3
 done
 
-echo "Ray head node is ready!"
+if [ "$ray_started" = false ]; then
+    echo "ERROR: Failed to start Ray head node after $max_retries attempts"
+    echo "Check for port conflicts or other issues in the output above."
+    exit 1
+fi
 
 
 
