@@ -1,0 +1,173 @@
+Sender: LSF System <lsfadmin@lsf-dev1.fyre.ibm.com>
+Subject: Job 573: <./ray_launch_cluster.sh -n ray_cpu -c "python sample_workload/batch_inference_cpu_test.py" -m 2000000000> in cluster <sage> Exited
+
+Job <./ray_launch_cluster.sh -n ray_cpu -c "python sample_workload/batch_inference_cpu_test.py" -m 2000000000> was submitted from host <lsf-dev1.fyre.ibm.com> by user <mspriggs> in cluster <sage> at Tue Jun  9 09:18:02 2026
+Job was executed on host(s) <4*lsf-dev1.fyre.ibm.com>, in queue <normal>, as user <mspriggs> in cluster <sage> at Tue Jun  9 09:18:02 2026
+</home2/mspriggs> was used as the home directory.
+</home2/mspriggs/github.com/michaelspriggs/ray-integration> was used as the working directory.
+Started at Tue Jun  9 09:18:02 2026
+Terminated at Tue Jun  9 09:18:54 2026
+Results reported at Tue Jun  9 09:18:54 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+./ray_launch_cluster.sh -n ray_cpu -c "python sample_workload/batch_inference_cpu_test.py" -m 2000000000
+------------------------------------------------------------
+
+TERM_OWNER: job killed by owner.
+Exited with signal termination: 14.
+
+Resource usage summary:
+
+    CPU time :                                   48.00 sec.
+    Max Memory :                                 1602 MB
+    Average Memory :                             662.85 MB
+    Total Requested Memory :                     -
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              6
+    Max Threads :                                12
+    Run time :                                   52 sec.
+    Turnaround time :                            52 sec.
+
+The output (if any) follows:
+
+=== Ray 2.x on LSF Cluster Setup ===
+LSB_MCPU_HOSTS=lsf-dev1.fyre.ibm.com 4 
+CUDA_VISIBLE_DEVICES=
+
+---- LSB_DJOB_HOSTFILE=/home2/mspriggs/.lsbatch/1781021882.573.hostfile
+lsf-dev1.fyre.ibm.com
+lsf-dev1.fyre.ibm.com
+lsf-dev1.fyre.ibm.com
+lsf-dev1.fyre.ibm.com
+---- End of LSB_DJOB_HOSTFILE
+
+RAY_TMPDIR=/tmp/ray-mspriggs
+Adding host: lsf-dev1.fyre.ibm.com
+The host list is: lsf-dev1.fyre.ibm.com
+Head node will use port: 27924
+Dashboard will use port: 42646
+host=lsf-dev1.fyre.ibm.com cores=4
+Starting Ray head node on: lsf-dev1.fyre.ibm.com
+Object store memory set to: 2000000000 bytes
+Ray will auto-detect GPUs from CUDA_VISIBLE_DEVICES
+Head node CPUs: 4
+2026-06-09 09:18:10,345	INFO utils.py:112 -- Overwriting previous Ray address (9.30.117.31:34963). Running ray.init() on this node will now connect to the new instance at 9.30.117.31:27924. To override this behavior, pass address=9.30.117.31:34963 to ray.init().
+2026-06-09 09:18:07,470	INFO usage_lib.py:467 -- Usage stats collection is enabled by default without user confirmation because this terminal is detected to be non-interactive. To disable this, add `--disable-usage-stats` to the command that starts the cluster, or run the following command: `ray disable-usage-stats` before starting the cluster. See https://docs.ray.io/en/master/cluster/usage-stats.html for more details.
+2026-06-09 09:18:07,470	INFO scripts.py:823 -- [37mLocal node IP[39m: [1m9.30.117.31[22m
+2026-06-09 09:18:10,343	SUCC scripts.py:860 -- [32m--------------------[39m
+2026-06-09 09:18:10,344	SUCC scripts.py:861 -- [32mRay runtime started.[39m
+2026-06-09 09:18:10,344	SUCC scripts.py:862 -- [32m--------------------[39m
+2026-06-09 09:18:10,344	INFO scripts.py:864 -- [36mNext steps[39m
+2026-06-09 09:18:10,344	INFO scripts.py:867 -- To add another node to this Ray cluster, run
+2026-06-09 09:18:10,344	INFO scripts.py:870 -- [1m  ray start --address='9.30.117.31:27924'[22m
+2026-06-09 09:18:10,344	INFO scripts.py:879 -- To connect to this Ray cluster:
+2026-06-09 09:18:10,344	INFO scripts.py:881 -- [35mimport[39m[26m ray
+2026-06-09 09:18:10,344	INFO scripts.py:882 -- ray[35m.[39m[26minit()
+2026-06-09 09:18:10,344	INFO scripts.py:894 -- To submit a Ray job using the Ray Jobs CLI:
+2026-06-09 09:18:10,344	INFO scripts.py:895 -- [1m  RAY_ADDRESS='http://9.30.117.31:42646' ray job submit --working-dir . -- python my_script.py[22m
+2026-06-09 09:18:10,344	INFO scripts.py:904 -- See https://docs.ray.io/en/latest/cluster/running-applications/job-submission/index.html 
+2026-06-09 09:18:10,344	INFO scripts.py:908 -- for more information on submitting Ray jobs to the Ray cluster.
+2026-06-09 09:18:10,345	INFO scripts.py:913 -- To terminate the Ray runtime, run
+2026-06-09 09:18:10,345	INFO scripts.py:914 -- [1m  ray stop[22m
+2026-06-09 09:18:10,345	INFO scripts.py:917 -- To view the status of the cluster, use
+2026-06-09 09:18:10,345	INFO scripts.py:918 --   [1mray status[22m[26m
+2026-06-09 09:18:10,345	INFO scripts.py:922 -- To monitor and debug Ray, view the dashboard at 
+2026-06-09 09:18:10,345	INFO scripts.py:923 --   [1m9.30.117.31:42646[22m[26m
+2026-06-09 09:18:10,345	INFO scripts.py:930 -- [4mIf connection to the dashboard fails, check your firewall settings and network configuration.[24m
+======== Autoscaler status: 2026-06-09 09:18:23.669946 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_cf346cda7be759ca8d0d7e8c8f8a5befda5aeb54adf8eb915fd07c4c
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/4.0 CPU
+ 0B/2.53GiB memory
+ 0B/1.86GiB object_store_memory
+
+Demands:
+ (no resource demands)
+adding the workers to head node: 
+
+=== Ray Cluster Status ===
+======== Autoscaler status: 2026-06-09 09:18:23.669946 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_cf346cda7be759ca8d0d7e8c8f8a5befda5aeb54adf8eb915fd07c4c
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/4.0 CPU
+ 0B/2.53GiB memory
+ 0B/1.86GiB object_store_memory
+
+Demands:
+ (no resource demands)
+
+Running user workload: python sample_workload/batch_inference_cpu_test.py
+
+The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a one-time only operation. You can interrupt this and resume the migration later on by calling `transformers.utils.move_cache()`.
+0it [00:00, ?it/s]0it [00:00, ?it/s]
+2026-06-09 09:18:33,552	INFO worker.py:1636 -- Connecting to existing Ray cluster at address: lsf-dev1.fyre.ibm.com:27924...
+2026-06-09 09:18:33,583	INFO worker.py:1812 -- Connected to Ray cluster. View the dashboard at [1m[32mhttp://9.30.117.31:42646 [39m[22m
+[36m(EncoderActor pid=2259690)[0m /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+[36m(EncoderActor pid=2259690)[0m   warnings.warn(
+[36m(EncoderActor pid=2259691)[0m /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.[32m [repeated 2x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(EncoderActor pid=2259691)[0m   warnings.warn([32m [repeated 2x across cluster][0m
+[36m(EncoderActor pid=2259690)[0m /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+[36m(EncoderActor pid=2259690)[0m   warnings.warn(
+Connecting to Ray cluster at lsf-dev1.fyre.ibm.com:27924
+
+=== CPU Batch Inference Test ===
+Model: sentence-transformers/all-MiniLM-L6-v2
+Time: 2026-06-09T09:18:34.662696
+
+Creating 2 encoder actors...
+[36m(EncoderActor pid=2259690)[0m Loading model sentence-transformers/all-MiniLM-L6-v2...
+[36m(EncoderActor pid=2259691)[0m Model loaded on cf346cda7be759ca8d0d7e8c8f8a5befda5aeb54adf8eb915fd07c4c
+[36m(EncoderActor pid=2259691)[0m Loading model sentence-transformers/all-MiniLM-L6-v2...
+Actors initialized!
+
+Running batch inference...
+
+=== Results ===
+Total batches processed: 10
+Total texts encoded: 50
+Total time: 0.37s
+Overall throughput: 135.68 texts/sec
+Average batch throughput: 80.51 texts/sec
+Embedding dimension: 384
+
+Results saved to: batch_inference_results/cpu_test_20260609_091848.json
+
+=== Test Complete ===
+[36m(EncoderActor pid=2259690)[0m Model loaded on cf346cda7be759ca8d0d7e8c8f8a5befda5aeb54adf8eb915fd07c4c
+
+SUCCESS: Workload completed successfully
+Shutting down Ray cluster...
+2026-06-09 09:18:51,116	VINFO scripts.py:1170 -- Send termination request to `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/raylet --store_socket_name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=cf346cda7be759ca8d0d7e8c8f8a5befda5aeb54adf8eb915fd07c4c --node_ip_address=9.30.117.31 --maximum_startup_concurrency=4 --static_resource_list=node:9.30.117.31,1.0,node:__internal_head__,1.0,CPU,4,memory,2711680000,object_store_memory,2000000000 "--python_worker_command=/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/_private/workers/setup_worker.py /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/_private/workers/default_worker.py --node-ip-address=9.30.117.31 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/plasma_store --raylet-name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/raylet --redis-address=None --metrics-agent-port=63157 --runtime-env-agent-port=65171 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=65171 --gcs-address=9.30.117.31:27924 --session-name=session_2026-06-09_09-18-07_473438_2259297 --temp-dir=/tmp/ray-mspriggs/ray --webui=9.30.117.31:42646 --cluster-id=8fb38a3f291d8171c21aad13040ac453e7f8157d7a4fcaf19cd66f0e RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" "--java_worker_command=/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/_private/workers/setup_worker.py -Dray.address=9.30.117.31:27924 -Dray.raylet.node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER -Dray.object-store.socket-name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/plasma_store -Dray.raylet.socket-name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/raylet -Dray.redis.password= -Dray.node-ip=9.30.117.31 -Dray.home=/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/../.. -Dray.logging.dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs -Dray.session-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297 RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER io.ray.runtime.runner.worker.DefaultWorker" --cpp_worker_command= --native_library_path=/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/cpp/lib --temp_dir=/tmp/ray-mspriggs/ray --session_dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297 --log_dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --resource_dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/runtime_resources --metrics-agent-port=63157 --metrics_export_port=64619 --runtime_env_agent_port=65171 --object_store_memory=2000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=9.30.117.31:27924 --session-name=session_2026-06-09_09-18-07_473438_2259297 --labels= --cluster-id=8fb38a3f291d8171c21aad13040ac453e7f8157d7a4fcaf19cd66f0e --head --num_prestart_python_workers=4 "--dashboard_agent_command=/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python -u /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/dashboard/agent.py --node-ip-address=9.30.117.31 --metrics-export-port=64619 --dashboard-agent-port=63157 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/plasma_store --raylet-name=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/sockets/raylet --temp-dir=/tmp/ray-mspriggs/ray --session-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297 --log-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2026-06-09_09-18-07_473438_2259297 --gcs-address=9.30.117.31:27924 --cluster-id-hex=8fb38a3f291d8171c21aad13040ac453e7f8157d7a4fcaf19cd66f0e" "--runtime_env_agent_command=/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python -u /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=9.30.117.31 --runtime-env-agent-port=65171 --gcs-address=9.30.117.31:27924 --cluster-id-hex=8fb38a3f291d8171c21aad13040ac453e7f8157d7a4fcaf19cd66f0e --runtime-env-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --temp-dir=/tmp/ray-mspriggs/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2026-06-09 09:18:51,331	INFO scripts.py:1200 -- 1/1 stopped.2026-06-09 09:18:51,409	VINFO scripts.py:1170 -- Send termination request to `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python -u /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/autoscaler/_private/monitor.py --logs-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --gcs-address=9.30.117.31:27924 --monitor-ip=9.30.117.31[22m[26m` [2m(via SIGTERM)[22m[26m
+2026-06-09 09:18:51,409	VINFO scripts.py:1170 -- Send termination request to `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python -u /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297 --logs-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --gcs-address=9.30.117.31:27924 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2026-06-09 09:18:51,413	VINFO scripts.py:1170 -- Send termination request to `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python -m ray.util.client.server --address=9.30.117.31:27924 --host=0.0.0.0 --port=10001 --mode=proxy --runtime-env-agent-address=http://9.30.117.31:65171[22m[26m` [2m(via SIGTERM)[22m[26m
+2026-06-09 09:18:51,426	VINFO scripts.py:1178 -- Attempted to stop `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python -u /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297 --logs-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --gcs-address=9.30.117.31:27924 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m`, but process was already dead.
+2026-06-09 09:18:51,436	VINFO scripts.py:1170 -- Send termination request to `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/bin/python /home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/dashboard/dashboard.py --host=0.0.0.0 --port=42646 --port-retries=0 --temp-dir=/tmp/ray-mspriggs/ray --log-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --session-dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --gcs-address=9.30.117.31:27924 --cluster-id-hex=8fb38a3f291d8171c21aad13040ac453e7f8157d7a4fcaf19cd66f0e --node-ip-address=9.30.117.31[22m[26m` [2m(via SIGTERM)[22m[26m
+2026-06-09 09:18:51,470	INFO scripts.py:1200 -- 1/4 stopped.2026-06-09 09:18:51,724	INFO scripts.py:1200 -- 2/4 stopped.2026-06-09 09:18:51,724	INFO scripts.py:1200 -- 3/4 stopped.2026-06-09 09:18:52,180	INFO scripts.py:1200 -- 4/4 stopped.2026-06-09 09:18:52,238	VINFO scripts.py:1170 -- Send termination request to `[1m/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/core/src/ray/gcs/gcs_server --log_dir=/tmp/ray-mspriggs/ray/session_2026-06-09_09-18-07_473438_2259297/logs --config_list=eyJvYmplY3Rfc3BpbGxpbmdfY29uZmlnIjogIntcInR5cGVcIjogXCJmaWxlc3lzdGVtXCIsIFwicGFyYW1zXCI6IHtcImRpcmVjdG9yeV9wYXRoXCI6IFwiL3RtcC9yYXktbXNwcmlnZ3MvcmF5L3Nlc3Npb25fMjAyNi0wNi0wOV8wOS0xOC0wN180NzM0MzhfMjI1OTI5N1wifX0iLCAiaXNfZXh0ZXJuYWxfc3RvcmFnZV90eXBlX2ZzIjogdHJ1ZX0= --gcs_server_port=27924 --metrics-agent-port=63157 --node-ip-address=9.30.117.31 --session-name=session_2026-06-09_09-18-07_473438_2259297 --ray-commit=22541c38dbef25286cd6d19f1c151bf4fd62f2ed[22m[26m` [2m(via SIGTERM)[22m[26m
+2026-06-09 09:18:52,372	INFO scripts.py:1200 -- 1/1 stopped.2026-06-09 09:18:52,372	SUCC scripts.py:1245 -- [32mStopped all 6 Ray processes.[39m
+Job complete
+Job <573> is being terminated

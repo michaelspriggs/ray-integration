@@ -1,0 +1,374 @@
+Sender: LSF System <lsfadmin@lsf-dev1.fyre.ibm.com>
+Subject: Job 570: <./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" -m 10000000000> in cluster <sage> Exited
+
+Job <./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" -m 10000000000> was submitted from host <lsf-dev1.fyre.ibm.com> by user <mspriggs> in cluster <sage> at Tue Jun  9 07:41:06 2026
+Job was executed on host(s) <4*lsf-dev1.fyre.ibm.com>, in queue <normal>, as user <mspriggs> in cluster <sage> at Tue Jun  9 07:41:06 2026
+</home2/mspriggs> was used as the home directory.
+</home2/mspriggs/github.com/michaelspriggs/ray-integration> was used as the working directory.
+Started at Tue Jun  9 07:41:06 2026
+Terminated at Tue Jun  9 07:48:13 2026
+Results reported at Tue Jun  9 07:48:13 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" -m 10000000000
+------------------------------------------------------------
+
+TERM_OWNER: job killed by owner.
+Exited with signal termination: 9.
+
+Resource usage summary:
+
+    CPU time :                                   24.00 sec.
+    Max Memory :                                 64 MB
+    Average Memory :                             56.26 MB
+    Total Requested Memory :                     -
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              4
+    Max Threads :                                16
+    Run time :                                   427 sec.
+    Turnaround time :                            427 sec.
+
+The output (if any) follows:
+
+=== Ray 2.x on LSF Cluster Setup ===
+LSB_MCPU_HOSTS=lsf-dev1.fyre.ibm.com 4 
+CUDA_VISIBLE_DEVICES=
+
+---- LSB_AFFINITY_HOSTFILE=/home2/mspriggs/.lsbatch/1781016066.570.hostAffinityFile
+---- End of LSB_AFFINITY_HOSTFILE
+
+---- LSB_DJOB_HOSTFILE=/home2/mspriggs/.lsbatch/1781016066.570.hostfile
+lsf-dev1.fyre.ibm.com
+lsf-dev1.fyre.ibm.com
+lsf-dev1.fyre.ibm.com
+lsf-dev1.fyre.ibm.com
+---- End of LSB_DJOB_HOSTFILE
+
+RAY_TMPDIR=/tmp/ray-mspriggs
+Adding host: lsf-dev1.fyre.ibm.com
+The host list is: lsf-dev1.fyre.ibm.com
+Head node will use port: 37633
+Dashboard will use port: 43967
+Starting Ray head node on: lsf-dev1.fyre.ibm.com
+Object store memory set to: 10000000000 bytes
+Ray will auto-detect GPUs from CUDA_VISIBLE_DEVICES
+Head node CPUs: 
+Usage: ray start [OPTIONS]
+Try 'ray start --help' for help.
+
+Error: Invalid value for '--num-cpus': '--object-store-memory' is not a valid integer.
+[2026-06-09 07:41:35,892 E 2240529 2240529] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:42:05,901 W 2240529 2240529] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:42:15,425 E 2240689 2240689] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:42:45,433 W 2240689 2240689] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:42:54,972 E 2240825 2240825] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:43:24,979 W 2240825 2240825] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:43:34,487 E 2240969 2240969] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:44:04,493 W 2240969 2240969] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:44:14,033 E 2241126 2241126] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:44:44,039 W 2241126 2241126] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:44:53,668 E 2241276 2241276] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:45:23,674 W 2241276 2241276] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:45:33,185 E 2241425 2241425] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:46:03,192 W 2241425 2241425] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:46:12,762 E 2241573 2241573] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:46:42,771 W 2241573 2241573] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:46:52,257 E 2241703 2241703] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:47:22,268 W 2241703 2241703] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:47:32,063 E 2241850 2241850] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.
+[2026-06-09 07:48:02,069 W 2241850 2241850] gcs_client.cc:178: Failed to get cluster ID from GCS server: TimedOut: Timed out while waiting for GCS to become available.
+Traceback (most recent call last):
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/bin/ray", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2668, in main
+    return cli()
+           ^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1912, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home2/mspriggs/miniforge3/envs/ray_cpu/lib/python3.11/site-packages/ray/scripts/scripts.py", line 2051, in status
+    gcs_client = ray._raylet.GcsClient(address=address)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 2722, in ray._raylet.GcsClient.__cinit__
+  File "python/ray/includes/gcs_client.pxi", line 64, in ray._raylet.NewGcsClient.standalone
+  File "python/ray/includes/common.pxi", line 114, in ray._raylet.check_status_timeout_as_rpc_error
+ray.exceptions.RpcError: Timed out while waiting for GCS to become available.
+[2026-06-09 07:48:11,590 E 2242009 2242009] gcs_rpc_client.h:179: Failed to connect to GCS at address lsf-dev1.fyre.ibm.com:37633 within 5 seconds.

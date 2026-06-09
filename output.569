@@ -1,0 +1,36 @@
+Sender: LSF System <lsfadmin@lsf-dev1.fyre.ibm.com>
+Subject: Job 569: <./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" -m 10000000000> in cluster <sage> Exited
+
+Job <./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" -m 10000000000> was submitted from host <lsf-dev1.fyre.ibm.com> by user <mspriggs> in cluster <sage> at Tue Jun  9 07:39:59 2026
+Job was executed on host(s) <4*lsf-dev1.fyre.ibm.com>, in queue <normal>, as user <mspriggs> in cluster <sage> at Tue Jun  9 07:39:59 2026
+</home2/mspriggs> was used as the home directory.
+</home2/mspriggs/github.com/michaelspriggs/ray-integration> was used as the working directory.
+Started at Tue Jun  9 07:39:59 2026
+Terminated at Tue Jun  9 07:39:59 2026
+Results reported at Tue Jun  9 07:39:59 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" -m 10000000000
+------------------------------------------------------------
+
+Exited with exit code 126.
+
+Resource usage summary:
+
+    CPU time :                                   0.04 sec.
+    Max Memory :                                 -
+    Average Memory :                             -
+    Total Requested Memory :                     -
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              1
+    Max Threads :                                1
+    Run time :                                   0 sec.
+    Turnaround time :                            0 sec.
+
+The output (if any) follows:
+
+/home2/mspriggs/.lsbatch/1781015999.569: line 8: ./ray_launch_cluster.sh: Permission denied

@@ -192,5 +192,4 @@ else
     echo "Shutting down Ray cluster..."
     ray stop
     echo "Job complete"
-    bkill $LSB_JOBID
 fi
