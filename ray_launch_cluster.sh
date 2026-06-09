@@ -17,10 +17,6 @@ echo "=== Ray 2.x on LSF Cluster Setup ==="
 echo "LSB_MCPU_HOSTS=$LSB_MCPU_HOSTS"
 echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 echo ""
-echo "---- LSB_AFFINITY_HOSTFILE=$LSB_AFFINITY_HOSTFILE"
-cat $LSB_AFFINITY_HOSTFILE
-echo "---- End of LSB_AFFINITY_HOSTFILE"
-echo ""
 echo "---- LSB_DJOB_HOSTFILE=$LSB_DJOB_HOSTFILE"
 cat $LSB_DJOB_HOSTFILE
 echo "---- End of LSB_DJOB_HOSTFILE"
@@ -88,24 +84,18 @@ export port
 dashboard_port=$(getfreeport)
 echo "Dashboard will use port: $dashboard_port"
 
-# Compute number of cores allocated to hosts
-# Format of each line in file $LSB_AFFINITY_HOSTFILE:
-#   host_name core_id_list NUMA_node_id_list memory_policy
-# core_id_list is comma separeted core IDs. e.g.
-#   host1 1,2,3,4,5,6,7
-#   host2 0,2,3,4,6,7,8
-#   host2 19,21,22,23,24,26,27
-#   host2 28,29,37,41,48,49,50
-# First, count up number of cores for each line (slot), then sum up for same host.
+# Compute number of cores allocated to hosts from LSB_DJOB_HOSTFILE
+# Each line in the file represents one slot (CPU core) allocated to a host
 declare -A associative
-while read -a line
+
+for host in `cat $LSB_DJOB_HOSTFILE | uniq`
 do
-    host=${line[0]}
-    num_cpu=`echo ${line[1]} | tr , ' ' | wc -w`
-    ((associative[$host]+=$num_cpu))
-done < $LSB_AFFINITY_HOSTFILE
+    num_slots=`grep -c "^$host$" $LSB_DJOB_HOSTFILE`
+    associative[$host]=$num_slots
+done
+
 for host in ${!associative[@]}; do
-    echo host=$host cores=${associative[$host]}
+    echo "host=$host cores=${associative[$host]}"
 done
 
 #Assumption only one head node and more than one 
