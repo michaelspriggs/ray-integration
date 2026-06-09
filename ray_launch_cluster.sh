@@ -173,10 +173,10 @@ echo "=== Ray Cluster Status ==="
 ray status --address $head_node:$port
 echo ""
 
-# Run user workload
+# Run user workload with blaunch for LSF tracking
 echo "Running user workload: $user_command"
 echo ""
-$user_command
+blaunch -z $head_node $user_command
 
 exit_code=$?
 
