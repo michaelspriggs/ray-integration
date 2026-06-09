@@ -103,9 +103,20 @@ done
 
 head_node=${hosts[0]}
 
-export head_node
+# Resolve hostname to IP address for Ray
+# Use getent or host command to get IP, fallback to hostname if resolution fails
+head_node_ip=$(getent hosts $head_node | awk '{ print $1 }' | head -1)
+if [ -z "$head_node_ip" ]; then
+    head_node_ip=$(host $head_node | awk '/has address/ { print $4 }' | head -1)
+fi
+if [ -z "$head_node_ip" ]; then
+    echo "WARNING: Could not resolve $head_node to IP, using hostname"
+    head_node_ip=$head_node
+fi
 
-echo "Starting Ray head node on: ${hosts[0]}"
+echo "Starting Ray head node on: ${hosts[0]} (IP: $head_node_ip)"
+export head_node
+export head_node_ip
 
 if [ -z $object_store_mem ]
 then
@@ -137,7 +148,8 @@ while [ "$ray_started" = false ] && [ $retry_count -lt $max_retries ]; do
     echo "Attempt $retry_count/$max_retries: Trying port $port (dashboard: $dashboard_port)"
     
     # Ray 2.x command with updated flags
-    command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --num-cpus $num_cpu_for_head --object-store-memory $object_store_mem --include-dashboard true --dashboard-host 0.0.0.0"
+    # Use --node-ip-address to explicitly set the IP for multi-node clusters
+    command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --num-cpus $num_cpu_for_head --object-store-memory $object_store_mem --include-dashboard true --dashboard-host 0.0.0.0 --node-ip-address $head_node_ip"
     
     echo "Launching Ray head node..."
     $command_launch &
@@ -183,19 +195,20 @@ echo "adding the workers to head node: ${workers[*]}"
 # Run ray on worker nodes and connect to head
 for host in "${workers[@]}"
 do
-    echo "Starting worker on: $host, connecting to head node: $head_node"
+    echo "Starting worker on: $host, connecting to head node: $head_node_ip"
 
     sleep 10
     num_cpu=${associative[$host]}
     
     # Ray 2.x worker command - GPUs auto-detected via CUDA_VISIBLE_DEVICES
-    command_for_worker="blaunch -z $host ray start --address $head_node:$port --num-cpus $num_cpu --object-store-memory $object_store_mem"
+    # Use head_node_ip instead of hostname for consistent addressing
+    command_for_worker="blaunch -z $host ray start --address $head_node_ip:$port --num-cpus $num_cpu --object-store-memory $object_store_mem"
     
     echo "Worker command: $command_for_worker"
     $command_for_worker &
     
     sleep 10
-    command_check_up_worker="blaunch -z $host ray status --address $head_node:$port"
+    command_check_up_worker="blaunch -z $host ray status --address $head_node_ip:$port"
     while ! $command_check_up_worker
     do
         echo "Waiting for worker $host to join cluster..."
@@ -207,7 +220,7 @@ done
 # Display cluster status before running workload
 echo ""
 echo "=== Ray Cluster Status ==="
-ray status --address $head_node:$port
+ray status --address $head_node_ip:$port
 echo ""
 
 # Run user workload with blaunch for LSF tracking

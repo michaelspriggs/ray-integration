@@ -11,7 +11,8 @@ import json
 from datetime import datetime
 
 # Connect to Ray cluster
-head_node = str(os.environ["head_node"])
+# Use head_node_ip if available (for multi-node), otherwise fall back to head_node
+head_node = str(os.environ.get("head_node_ip", os.environ["head_node"]))
 port = str(os.environ["port"])
 print(f"Connecting to Ray cluster at {head_node}:{port}")
 ray.init(address=f"{head_node}:{port}")
