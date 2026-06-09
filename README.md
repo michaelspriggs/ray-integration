@@ -14,13 +14,13 @@ This repository has been modernized with:
 - ✅ **Ray 2.40+** (upgraded from Ray 1.x)
 - ✅ **Python 3.11** (upgraded from Python 3.7)
 - ✅ **vLLM integration** for efficient LLM batch inference
-- ✅ **Simplified LSF patterns** (CPU-only and GPU with exclusive access)
+- ✅ **Simplified LSF patterns** (CPU-only and GPU)
 - ✅ **Flexible GPU allocation** (works with heterogeneous clusters)
 - ✅ **Production-ready reference architecture**
 
 ## Quick Start
 
-### 1. Setup Environment
+### 1. Set up Environment
 
 Choose the appropriate environment for your use case:
 
@@ -40,12 +40,6 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```bash
 conda env create -f sample_conda_env/ray_2x_gpu.yml
 conda activate ray_gpu
-```
-
-**Legacy environment (Ray 1.x):**
-```bash
-conda env create -f sample_conda_env/sample_ray_env.yml
-conda activate ray
 ```
 
 **Note:** See [sample_conda_env/README.md](sample_conda_env/README.md) for detailed setup instructions and troubleshooting.
@@ -101,7 +95,7 @@ bsub -n 8 -o output.%J \
 - Small models (e.g., gpt2)
 - Debugging
 
-### Pattern 2: GPU with Exclusive Access (Production)
+### Pattern 2: GPU (Production)
 
 ```bash
 bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
@@ -118,7 +112,7 @@ bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
 
 **Key features:**
 - `num=1/task`: One GPU per task
-- `j_exclusive=yes`: Exclusive GPU access (no sharing)
+- `j_exclusive=yes`: Prevents GPU sharing between jobs
 - LSF automatically sets `CUDA_VISIBLE_DEVICES`
 - Ray auto-detects GPUs from environment
 
@@ -137,18 +131,6 @@ bsub -n 8 \
  ./ray_launch_cluster.sh -n ray_gpu -c "python your_workload.py" -m 20000000000
 ```
 
-## Configuring Conda (Legacy)
-
-For the legacy Ray 1.x environment:
-
-```bash
-conda env create -f sample_conda_env/sample_ray_env.yml
-conda activate ray
-ray --version
-# Output: ray, version 1.4.0
-```
-
-**Note:** The legacy environment is provided for backward compatibility. New projects should use Ray 2.x environments.
 ## Sample Workloads
 
 The `sample_workload/` directory contains example workloads:
@@ -156,7 +138,7 @@ The `sample_workload/` directory contains example workloads:
 - **`sample_code_for_ray.py`**: Simple CPU-only Ray workload
 - **`cifar_pytorch_example.py`**: PyTorch training example (CPU and GPU)
 
-**Note:** These examples use Ray 1.x APIs. For Ray 2.x examples, see the `batch_inference/` directory.
+**Note:** These are legacy examples using Ray 1.x APIs. For modern Ray 2.x examples, see the `batch_inference/` directory.
 
 ### Running Sample Workloads
 
@@ -169,14 +151,6 @@ bsub -n 4 -o output.%J \
   -m 10000000000
 ```
 
-**GPU training example (legacy):**
-```bash
-bsub -n 4 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray \
-  -c "python sample_workload/cifar_pytorch_example.py --use-gpu --num-workers 4 --num_epochs 5" \
-  -m 20000000000
-```
 
 ## Accessing the Ray Dashboard
 
@@ -202,26 +176,6 @@ ssh -L $PORT:localhost:$PORT -N -f -l $USER $HEAD_NODE
 
 Open in your browser: `http://127.0.0.1:8265`
 
-## Migration from Ray 1.x to Ray 2.x
-
-If you have existing Ray 1.x code, here are the key changes:
-
-### API Changes
-
-| Ray 1.x | Ray 2.x |
-|---------|---------|
-| `ray.util.sgd.torch.TorchTrainer` | `ray.train.torch.TorchTrainer` |
-| `TrainingOperator` | `train_loop_per_worker` function |
-| `ray.util.sgd.utils` | `ray.train` |
-| `ray.get_runtime_context().node_id` | `ray.get_runtime_context().get_node_id()` |
-
-### Environment Changes
-
-- Python 3.7 → Python 3.10/3.11
-- PyTorch 1.8 → PyTorch 2.x
-- CUDA 10.2 → CUDA 11.8+
-
-See the [Ray 2.x migration guide](https://docs.ray.io/en/latest/ray-overview/migration-guide.html) for complete details.
 
 ## Repository Structure
 
