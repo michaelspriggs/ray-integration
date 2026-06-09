@@ -59,35 +59,43 @@ The `batch_inference/` directory contains a production-ready reference implement
 ### Quick Example - CPU Testing
 
 ```bash
-bsub -n 4 -o output.%J \
- ./ray_launch_cluster.sh \
- -n ray_cpu \
- -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" \
- -m 10000000000
+bsub < submit_cpu.lsf
 ```
 
 ### Quick Example - GPU Inference
 
 ```bash
-bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
- ./ray_launch_cluster.sh \
- -n ray_gpu \
- -c "python batch_inference/batch_infer_vllm_actors.py" \
- -m 20000000000
+bsub < submit_gpu.lsf
 ```
 
 **See [batch_inference/README.md](batch_inference/README.md) for complete documentation.**
 
 ## Standard LSF Submission Patterns
 
+Two example submission scripts are provided:
+
 ### Pattern 1: CPU-Only (Development/Testing)
 
+**File: `submit_cpu.lsf`**
 ```bash
-bsub -n 8 -o output.%J \
- ./ray_launch_cluster.sh \
- -n ray_cpu \
- -c "python your_workload.py" \
- -m 20000000000
+#!/bin/bash
+#BSUB -n 8                    # Number of CPU cores
+#BSUB -o output.%J            # Output file (%J = job ID)
+#BSUB -J ray_cpu_job          # Job name
+#BSUB -q normal               # Queue name (adjust for your cluster)
+#BSUB -W 2:00                 # Wall time limit (hours:minutes)
+#BSUB -M 100GB                # Memory limit per node
+#BSUB -R "rusage[mem=10GB]"   # Memory reservation per task
+
+./ray_launch_cluster.sh \
+  -n ray_cpu \
+  -c "python your_workload.py" \
+  -m 10000000000
+```
+
+**Submit with:**
+```bash
+bsub < submit_cpu.lsf
 ```
 
 **Use for:**
@@ -97,12 +105,27 @@ bsub -n 8 -o output.%J \
 
 ### Pattern 2: GPU (Production)
 
+**File: `submit_gpu.lsf`**
 ```bash
-bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
- ./ray_launch_cluster.sh \
- -n ray_gpu \
- -c "python your_workload.py" \
- -m 20000000000
+#!/bin/bash
+#BSUB -n 8                              # Number of CPU cores
+#BSUB -gpu "num=1/task:j_exclusive=yes" # 1 GPU per task, prevent sharing
+#BSUB -o output.%J                      # Output file (%J = job ID)
+#BSUB -J ray_gpu_job                    # Job name
+#BSUB -q gpu                            # GPU queue (adjust for your cluster)
+#BSUB -W 4:00                           # Wall time limit (hours:minutes)
+#BSUB -M 200GB                          # Memory limit per node
+#BSUB -R "rusage[mem=20GB]"             # Memory reservation per task
+
+./ray_launch_cluster.sh \
+  -n ray_gpu \
+  -c "python your_workload.py" \
+  -m 20000000000
+```
+
+**Submit with:**
+```bash
+bsub < submit_gpu.lsf
 ```
 
 **Use for:**
@@ -116,20 +139,14 @@ bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
 - LSF automatically sets `CUDA_VISIBLE_DEVICES`
 - Ray auto-detects GPUs from environment
 
-### Optional LSF Parameters
+### Customizing Submission Scripts
 
-Customize resource requirements:
-
-```bash
-bsub -n 8 \
- -gpu "num=1/task:j_exclusive=yes" \
- -q gpu_queue \              # Specify queue
- -M 100GB \                  # Memory limit
- -W 2:00 \                   # Wall time (hours:minutes)
- -R "rusage[mem=10GB]" \     # Memory reservation per task
- -o output.%J \
- ./ray_launch_cluster.sh -n ray_gpu -c "python your_workload.py" -m 20000000000
-```
+Edit the `#BSUB` directives in the submission scripts to match your cluster configuration:
+- `-q`: Queue name (e.g., `normal`, `gpu`, `priority`)
+- `-M`: Memory limit per node
+- `-W`: Wall time limit
+- `-R "rusage[mem=...]"`: Memory reservation per task
+- `-n`: Number of CPU cores
 
 ## Sample Workloads
 
@@ -142,13 +159,14 @@ The `sample_workload/` directory contains example workloads:
 
 ### Running Sample Workloads
 
+Modify the provided submission scripts to run legacy examples:
+
 **CPU-only example:**
 ```bash
-bsub -n 4 -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray_cpu \
-  -c "python sample_workload/sample_code_for_ray.py" \
-  -m 10000000000
+# Edit submit_cpu.lsf to change the command line:
+# -c "python sample_workload/sample_code_for_ray.py"
+
+bsub < submit_cpu.lsf
 ```
 
 
@@ -181,7 +199,7 @@ Open in your browser: `http://127.0.0.1:8265`
 
 ```
 ray-integration/
-├── batch_inference/              # NEW: vLLM batch inference reference
+├── batch_inference/              # vLLM batch inference reference
 │   ├── README.md                 # Complete documentation
 │   ├── architecture.md           # Design rationale
 │   ├── config.yaml               # Configuration template
@@ -190,13 +208,16 @@ ray-integration/
 │   ├── dataset/                  # Sample data
 │   └── run_batch_inference.sh
 ├── sample_conda_env/
-│   ├── ray_2x_cpu.yml           # NEW: Ray 2.x CPU environment
-│   ├── ray_2x_gpu.yml           # NEW: Ray 2.x GPU environment
-│   └── sample_ray_env.yml       # Legacy: Ray 1.x environment
+│   ├── ray_2x_cpu.yml           # Ray 2.x CPU environment
+│   ├── ray_2x_gpu.yml           # Ray 2.x GPU environment
+│   ├── setup_cpu_env.sh         # CPU environment setup script
+│   └── sample_ray_env.yml       # Legacy Ray 1.x environment
 ├── sample_workload/
-│   ├── cifar_pytorch_example.py # Legacy: Ray 1.x training
-│   └── sample_code_for_ray.py   # Legacy: Ray 1.x example
-├── ray_launch_cluster.sh        # Updated for Ray 2.x
+│   ├── cifar_pytorch_example.py # Legacy Ray 1.x training example
+│   └── sample_code_for_ray.py   # Legacy Ray 1.x example
+├── submit_cpu.lsf               # CPU job submission script
+├── submit_gpu.lsf               # GPU job submission script
+├── ray_launch_cluster.sh        # Ray cluster launcher
 └── README.md                     # This file
 ```
 

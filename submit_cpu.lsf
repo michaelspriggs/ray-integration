@@ -1,0 +1,18 @@
+#!/bin/bash
+#BSUB -n 8                    # Number of CPU cores
+#BSUB -o output.%J            # Output file (%J = job ID)
+#BSUB -J ray_cpu_job          # Job name
+#BSUB -q normal               # Queue name (adjust for your cluster)
+#BSUB -W 2:00                 # Wall time limit (hours:minutes)
+#BSUB -M 100GB                # Memory limit per node
+#BSUB -R "rusage[mem=10GB]"   # Memory reservation per task
+
+# This script demonstrates CPU-only Ray workloads
+# Suitable for development, testing, and small models
+
+./ray_launch_cluster.sh \
+  -n ray_cpu \
+  -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" \
+  -m 10000000000
+
+# Made with Bob
