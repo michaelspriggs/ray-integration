@@ -4,7 +4,8 @@
 model:
   # Model name from HuggingFace or local path
   # IBM Granite model for code generation and general tasks
-  name: "ibm-granite/granite-3b-code-instruct"
+  # Note: Replace with your preferred IBM Granite model (e.g., ibm-granite/granite-3b-code-instruct, ibm-granite/granite-8b-code-instruct)
+  name: "ibm-granite/granite-3b-code-base"
   
   # Tensor parallelism: number of GPUs per model instance
   # Options: 1, 2, 4, 8, or "auto" to use all available GPUs per worker
