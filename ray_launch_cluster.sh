@@ -201,15 +201,16 @@ do
     num_cpu=${associative[$host]}
     
     # Ray 2.x worker command - GPUs auto-detected via CUDA_VISIBLE_DEVICES
+    # Use ssh instead of blaunch for worker nodes to avoid cross-host blaunch issues
     # Use head_node_ip instead of hostname for consistent addressing
-    command_for_worker="blaunch -z $host ray start --address $head_node_ip:$port --num-cpus $num_cpu --object-store-memory $object_store_mem"
+    command_for_worker="ssh $host 'source ~/.bashrc; conda activate $CONDA_DEFAULT_ENV; ray start --address $head_node_ip:$port --num-cpus $num_cpu --object-store-memory $object_store_mem'"
     
     echo "Worker command: $command_for_worker"
-    $command_for_worker &
+    eval $command_for_worker &
     
     sleep 10
-    command_check_up_worker="blaunch -z $host ray status --address $head_node_ip:$port"
-    while ! $command_check_up_worker
+    command_check_up_worker="ssh $host 'source ~/.bashrc; conda activate $CONDA_DEFAULT_ENV; ray status --address $head_node_ip:$port'"
+    while ! eval $command_check_up_worker
     do
         echo "Waiting for worker $host to join cluster..."
         sleep 3
@@ -234,12 +235,26 @@ if [ $exit_code != 0 ]; then
     echo ""
     echo "ERROR: Workload failed with exit code: $exit_code"
     echo "Shutting down Ray cluster..."
-    ray stop
+    # Stop Ray on head node
+    ray stop --force
+    # Stop Ray on all worker nodes
+    for host in "${workers[@]}"
+    do
+        echo "Stopping Ray on worker: $host"
+        ssh $host "source ~/.bashrc; conda activate $CONDA_DEFAULT_ENV; ray stop --force" || true
+    done
     exit $exit_code
 else
     echo ""
     echo "SUCCESS: Workload completed successfully"
     echo "Shutting down Ray cluster..."
-    ray stop
+    # Stop Ray on head node
+    ray stop --force
+    # Stop Ray on all worker nodes
+    for host in "${workers[@]}"
+    do
+        echo "Stopping Ray on worker: $host"
+        ssh $host "source ~/.bashrc; conda activate $CONDA_DEFAULT_ENV; ray stop --force" || true
+    done
     echo "Job complete"
 fi
