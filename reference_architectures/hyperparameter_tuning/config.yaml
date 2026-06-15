@@ -1,0 +1,3 @@
+search:
+  metric: loss
+  mode: min

@@ -1,0 +1,3 @@
+workflow:
+  cpu_stage_workers: 2
+  gpu_stage_workers: 2

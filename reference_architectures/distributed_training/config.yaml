@@ -1,0 +1,3 @@
+trainer:
+  framework: pytorch
+  num_workers: 4

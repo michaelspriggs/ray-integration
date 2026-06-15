@@ -1,241 +1,95 @@
-# Ray on LSF
+# ray-on-lsf
 
-Ray provides a simple, universal API for building distributed applications. Read more about Ray [here](https://docs.ray.io/).
+Reference architectures and platform utilities for running Ray on IBM Spectrum LSF.
 
-This repository demonstrates how to deploy **Ray 2.x** on LSF for AI workloads, including:
-- Distributed training
-- **Batch inference with vLLM** (NEW)
-- Flexible GPU allocation
-- Production-ready patterns
+This repository is organized around a clear separation between:
 
-## 🆕 What's New (2026 Update)
+- **platform assets** in `common/`
+- **reference workloads** in `reference_architectures/`
+- **supporting documentation** in `docs/`
+- **legacy Ray 1.x content** in `legacy/`
+- **small validation examples** in `examples/`
 
-This repository has been modernized with:
-- ✅ **Ray 2.40+** (upgraded from Ray 1.x)
-- ✅ **Python 3.11** (upgraded from Python 3.7)
-- ✅ **vLLM integration** for efficient LLM batch inference
-- ✅ **Simplified LSF patterns** (CPU-only and GPU)
-- ✅ **Flexible GPU allocation** (works with heterogeneous clusters)
-- ✅ **Production-ready reference architecture**
+## Repository Layout
 
-## Quick Start
-
-### 1. Set up Environment
-
-Choose the appropriate environment for your use case:
-
-**For CPU-only testing (Recommended for development):**
-```bash
-# Option A: Use the setup script (handles PyTorch CPU installation)
-cd sample_conda_env
-./setup_cpu_env.sh
-
-# Option B: Manual setup
-conda env create -f sample_conda_env/ray_2x_cpu.yml
-conda activate ray_cpu
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```text
+ray-on-lsf/
+├── README.md
+├── docs/
+├── common/
+├── reference_architectures/
+├── legacy/
+└── examples/
 ```
 
-**For GPU inference (Production):**
-```bash
-conda env create -f sample_conda_env/ray_2x_gpu.yml
-conda activate ray_gpu
-```
+## Quick Navigation
 
-**Note:** See [sample_conda_env/README.md](sample_conda_env/README.md) for detailed setup instructions and troubleshooting.
+### Documentation
+- [Architecture Overview](docs/architecture_overview.md)
+- [Getting Started](docs/getting_started.md)
+- [LSF Integration](docs/lsf_integration.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
-### 2. Verify Installation
+### Platform Utilities
+- [`common/start_ray_cluster.sh`](common/start_ray_cluster.sh)
+- [`common/stop_ray_cluster.sh`](common/stop_ray_cluster.sh)
+- [`common/utils.py`](common/utils.py)
 
-```bash
-conda activate ray_gpu  # or ray_cpu
-python -c "import ray; print(f'Ray version: {ray.__version__}')"
-# Expected output: Ray version: 2.40.0
-```
+### Reference Architectures
+- [`reference_architectures/batch_inference_ray_data/`](reference_architectures/batch_inference_ray_data/)
+- [`reference_architectures/distributed_training/`](reference_architectures/distributed_training/)
+- [`reference_architectures/hyperparameter_tuning/`](reference_architectures/hyperparameter_tuning/)
+- [`reference_architectures/data_pipeline/`](reference_architectures/data_pipeline/)
+- [`reference_architectures/hybrid_cpu_gpu_pipeline/`](reference_architectures/hybrid_cpu_gpu_pipeline/)
 
-## 🚀 Batch Inference with vLLM (NEW)
+### Legacy Content
+- [`legacy/ray1/`](legacy/ray1/)
 
-The `batch_inference/` directory contains a production-ready reference implementation for distributed LLM inference.
+### Quick Tests
+- [`examples/quick_tests/minimal_ray_test.py`](examples/quick_tests/minimal_ray_test.py)
 
-### Quick Example - CPU Testing
+## Design Principles
 
-```bash
-bsub < batch_inference/submit_cpu.lsf
-```
+### 1. Copy-paste friendly
+Each reference architecture is intended to be:
+- self-contained
+- easy to copy into another repo
+- configurable with minimal edits
 
-### Quick Example - GPU Inference
+### 2. Consistent UX
+Each architecture should run with a predictable flow:
 
 ```bash
-bsub < batch_inference/submit_gpu.lsf
+bsub < submit_lsf.sh
 ```
 
-**See [batch_inference/README.md](batch_inference/README.md) for complete documentation.**
+### 3. Scalable growth
+New architectures can be added under `reference_architectures/` without changing the platform layer.
 
-## Standard LSF Submission Patterns
+### 4. Platform vs workload separation
+Cluster startup, shutdown, and shared helpers live in `common/`.
+Workload-specific logic lives in `reference_architectures/`.
 
-Two example submission scripts are provided:
+## Current Recommended Starting Point
 
-### Pattern 1: CPU-Only (Development/Testing)
+For a working end-to-end example, start with:
 
-**File: `batch_inference/submit_cpu.lsf`**
-```bash
-#!/bin/bash
-#BSUB -n 8                    # Number of CPU cores
-#BSUB -o output.%J            # Output file (%J = job ID)
-#BSUB -J ray_cpu_job          # Job name
-#BSUB -q normal               # Queue name (adjust for your cluster)
-#BSUB -W 2:00                 # Wall time limit (hours:minutes)
-#BSUB -M 100GB                # Memory limit per node
-#BSUB -R "rusage[mem=10GB]"   # Memory reservation per task
+- [`reference_architectures/batch_inference_ray_data/`](reference_architectures/batch_inference_ray_data/)
 
-./ray_launch_cluster.sh \
-  -n ray_cpu \
-  -c "python your_workload.py" \
-  -m 10000000000
-```
+Then follow:
 
-**Submit with:**
-```bash
-bsub < batch_inference/submit_cpu.lsf
-```
+- [docs/getting_started.md](docs/getting_started.md)
 
-**Use for:**
-- Development and testing
-- Small models (e.g., gpt2)
-- Debugging
+## Environment Notes
 
-### Pattern 2: GPU (Production)
+The repository currently retains the existing `sample_conda_env/` directory for environment setup compatibility during migration. See:
 
-**File: `batch_inference/submit_gpu.lsf`**
-```bash
-#!/bin/bash
-#BSUB -n 4                              # Four LSF tasks for a 4-GPU example
-#BSUB -gpu "num=1/task:j_exclusive=yes" # Request 1 GPU per task (4 GPUs total)
-#BSUB -o output.%J                      # Output file (%J = job ID)
-#BSUB -J ray_gpu_job                    # Job name
-#BSUB -q normal                         # Queue name (adjust for your cluster)
-#BSUB -W 4:00                           # Wall time limit (hours:minutes)
-#BSUB -M 200GB                          # Memory limit per node
-#BSUB -R "rusage[mem=20GB]"             # Memory reservation per task
+- [`sample_conda_env/README.md`](sample_conda_env/README.md)
 
-./ray_launch_cluster.sh \
-  -n ray_gpu \
-  -c "python your_workload.py" \
-  -m 20000000000
-```
+## Legacy Note
 
-**Submit with:**
-```bash
-bsub < batch_inference/submit_gpu.lsf
-```
-
-**Use for:**
-- Production workloads
-- GPU-accelerated inference
-- Large language models
-
-**Key features:**
-- `num=1/task`: One GPU per task
-- 4 LSF tasks in the default example provide 4 GPUs total
-- `j_exclusive=yes`: Prevents GPU sharing between jobs
-- LSF automatically sets `CUDA_VISIBLE_DEVICES`
-- Ray auto-detects GPUs from environment
-- The default batch inference config uses `dtype: "half"` for compatibility with Tesla T4-class GPUs
-
-### Customizing Submission Scripts
-
-Edit the `#BSUB` directives in the submission scripts to match your cluster configuration:
-- `-q`: Queue name (e.g., `normal`, `gpu`, `priority`)
-- `-M`: Memory limit per node
-- `-W`: Wall time limit
-- `-R "rusage[mem=...]"`: Memory reservation per task
-- `-n`: Number of CPU cores
-
-## Sample Workloads
-
-The `sample_workload/` directory contains example workloads:
-
-- **`sample_code_for_ray.py`**: Simple CPU-only Ray workload
-- **`cifar_pytorch_example.py`**: PyTorch training example (CPU and GPU)
-
-**Note:** These are legacy examples using Ray 1.x APIs. For modern Ray 2.x examples, see the `batch_inference/` directory.
-
-### Running Sample Workloads
-
-Modify the provided submission scripts to run legacy examples:
-
-**CPU-only example:**
-```bash
-# Edit submit_cpu.lsf to change the command line:
-# -c "python sample_workload/sample_code_for_ray.py"
-
-bsub < submit_cpu.lsf
-```
-
-
-## Accessing the Ray Dashboard
-
-The Ray dashboard provides real-time monitoring of your cluster.
-
-### 1. Find Dashboard Information
-
-Check the job output for dashboard details:
-```
-Starting ray head node on: node-01
-View the Ray dashboard at http://127.0.0.1:8265
-```
-
-### 2. Port Forward from Head Node
-
-```bash
-export PORT=8265
-export HEAD_NODE=node-01.your-domain.com
-ssh -L $PORT:localhost:$PORT -N -f -l $USER $HEAD_NODE
-```
-
-### 3. Access Dashboard
-
-Open in your browser: `http://127.0.0.1:8265`
-
-
-## Repository Structure
-
-```
-ray-integration/
-├── batch_inference/              # vLLM batch inference reference
-│   ├── README.md                 # Complete documentation
-│   ├── architecture.md           # Design rationale
-│   ├── config.yaml               # Configuration template
-│   ├── batch_infer_vllm_actors.py
-│   ├── batch_infer_ray_data.py
-│   ├── dataset/                  # Sample data
-│   └── run_batch_inference.sh
-├── sample_conda_env/
-│   ├── ray_2x_cpu.yml           # Ray 2.x CPU environment
-│   ├── ray_2x_gpu.yml           # Ray 2.x GPU environment
-│   ├── setup_cpu_env.sh         # CPU environment setup script
-│   └── sample_ray_env.yml       # Legacy Ray 1.x environment
-├── sample_workload/
-│   ├── cifar_pytorch_example.py # Legacy Ray 1.x training example
-│   └── sample_code_for_ray.py   # Legacy Ray 1.x example
-├── ray_launch_cluster.sh        # Ray cluster launcher
-├── README.md                    # This file
-└── batch_inference/
-    ├── submit_cpu.lsf           # CPU job submission script
-    └── submit_gpu.lsf           # GPU job submission script
-```
-
-## Resources
-
-- **Ray Documentation**: https://docs.ray.io/
-- **vLLM Documentation**: https://docs.vllm.ai/
-- **LSF Documentation**: Check your cluster's documentation
-- **Batch Inference Guide**: See [batch_inference/README.md](batch_inference/README.md)
-- **Architecture Details**: See [batch_inference/architecture.md](batch_inference/architecture.md)
-
-## Contributing
-
-See [IBMDCO.md](IBMDCO.md) for contribution guidelines.
+Older Ray 1.x examples and historical scripts have been moved under `legacy/ray1/` and are not part of the recommended quick start path.
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE).
