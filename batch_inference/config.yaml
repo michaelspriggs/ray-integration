@@ -21,6 +21,11 @@ model:
   # Lower values leave more memory for KV cache
   gpu_memory_utilization: 0.9
   
+  # Model dtype for vLLM on GPU.
+  # Use "half" for T4/V100-class GPUs that do not support bfloat16.
+  # Other common values: "auto", "float16", "bfloat16"
+  dtype: "half"
+  
   # Quantization (optional): "awq", "gptq", or null for no quantization
   quantization: null
 
@@ -44,10 +49,10 @@ execution:
 
 data:
   # Input data path (JSONL format with "text" or "prompt" field)
-  input_path: "dataset/sample_prompts.jsonl"
+  input_path: "batch_inference/dataset/sample_prompts.jsonl"
   
   # Output path for results
-  output_path: "output/results.jsonl"
+  output_path: "batch_inference/output/results.jsonl"
   
   # Maximum number of prompts to process (null for all)
   max_prompts: null
@@ -84,7 +89,7 @@ lsf:
   # bsub -n 8 -o output.%J ./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
   
   # Example GPU submission:
-  # bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./ray_launch_cluster.sh -n ray_gpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
+  # bsub -n 4 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./ray_launch_cluster.sh -n ray_gpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
   
   # Optional parameters:
   # -q queue_name          # Specify queue

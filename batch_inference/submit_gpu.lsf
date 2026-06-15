@@ -1,9 +1,9 @@
 #!/bin/bash
-#BSUB -n 8                              # Number of CPU cores
-#BSUB -gpu "num=1/task:j_exclusive=yes" # 1 GPU per task, prevent sharing
+#BSUB -n 4                              # Four LSF tasks for a 4-GPU example
+#BSUB -gpu "num=1/task:j_exclusive=yes" # Request 1 GPU per task (4 GPUs total)
 #BSUB -o output.%J                      # Output file (%J = job ID)
 #BSUB -J ray_gpu_job                    # Job name
-#BSUB -q gpu                            # GPU queue (adjust for your cluster)
+#BSUB -q normal                         # Queue name (adjust for your cluster)
 #BSUB -W 4:00                           # Wall time limit (hours:minutes)
 #BSUB -M 200GB                          # Memory limit per node
 #BSUB -R "rusage[mem=20GB]"             # Memory reservation per task

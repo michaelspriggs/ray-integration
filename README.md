@@ -59,13 +59,13 @@ The `batch_inference/` directory contains a production-ready reference implement
 ### Quick Example - CPU Testing
 
 ```bash
-bsub < submit_cpu.lsf
+bsub < batch_inference/submit_cpu.lsf
 ```
 
 ### Quick Example - GPU Inference
 
 ```bash
-bsub < submit_gpu.lsf
+bsub < batch_inference/submit_gpu.lsf
 ```
 
 **See [batch_inference/README.md](batch_inference/README.md) for complete documentation.**
@@ -76,7 +76,7 @@ Two example submission scripts are provided:
 
 ### Pattern 1: CPU-Only (Development/Testing)
 
-**File: `submit_cpu.lsf`**
+**File: `batch_inference/submit_cpu.lsf`**
 ```bash
 #!/bin/bash
 #BSUB -n 8                    # Number of CPU cores
@@ -95,7 +95,7 @@ Two example submission scripts are provided:
 
 **Submit with:**
 ```bash
-bsub < submit_cpu.lsf
+bsub < batch_inference/submit_cpu.lsf
 ```
 
 **Use for:**
@@ -105,14 +105,14 @@ bsub < submit_cpu.lsf
 
 ### Pattern 2: GPU (Production)
 
-**File: `submit_gpu.lsf`**
+**File: `batch_inference/submit_gpu.lsf`**
 ```bash
 #!/bin/bash
-#BSUB -n 8                              # Number of CPU cores
-#BSUB -gpu "num=1/task:j_exclusive=yes" # 1 GPU per task, prevent sharing
+#BSUB -n 4                              # Four LSF tasks for a 4-GPU example
+#BSUB -gpu "num=1/task:j_exclusive=yes" # Request 1 GPU per task (4 GPUs total)
 #BSUB -o output.%J                      # Output file (%J = job ID)
 #BSUB -J ray_gpu_job                    # Job name
-#BSUB -q gpu                            # GPU queue (adjust for your cluster)
+#BSUB -q normal                         # Queue name (adjust for your cluster)
 #BSUB -W 4:00                           # Wall time limit (hours:minutes)
 #BSUB -M 200GB                          # Memory limit per node
 #BSUB -R "rusage[mem=20GB]"             # Memory reservation per task
@@ -125,7 +125,7 @@ bsub < submit_cpu.lsf
 
 **Submit with:**
 ```bash
-bsub < submit_gpu.lsf
+bsub < batch_inference/submit_gpu.lsf
 ```
 
 **Use for:**
@@ -135,9 +135,11 @@ bsub < submit_gpu.lsf
 
 **Key features:**
 - `num=1/task`: One GPU per task
+- 4 LSF tasks in the default example provide 4 GPUs total
 - `j_exclusive=yes`: Prevents GPU sharing between jobs
 - LSF automatically sets `CUDA_VISIBLE_DEVICES`
 - Ray auto-detects GPUs from environment
+- The default batch inference config uses `dtype: "half"` for compatibility with Tesla T4-class GPUs
 
 ### Customizing Submission Scripts
 
@@ -215,10 +217,11 @@ ray-integration/
 ├── sample_workload/
 │   ├── cifar_pytorch_example.py # Legacy Ray 1.x training example
 │   └── sample_code_for_ray.py   # Legacy Ray 1.x example
-├── submit_cpu.lsf               # CPU job submission script
-├── submit_gpu.lsf               # GPU job submission script
 ├── ray_launch_cluster.sh        # Ray cluster launcher
-└── README.md                     # This file
+├── README.md                    # This file
+└── batch_inference/
+    ├── submit_cpu.lsf           # CPU job submission script
+    └── submit_gpu.lsf           # GPU job submission script
 ```
 
 ## Resources

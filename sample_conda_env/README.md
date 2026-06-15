@@ -73,10 +73,10 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 **Key packages:**
 - Python 3.11
 - Ray 2.40.0
-- PyTorch 2.2.0 (GPU)
+- PyTorch 2.1.2 (GPU)
 - CUDA 11.8
 - vLLM 0.3.0
-- Flash Attention 2.5.0
+- Flash Attention is installed transitively by vLLM when compatible
 
 ### 3. Ray 1.x (Legacy)
 
@@ -129,6 +129,25 @@ tokenizer = AutoTokenizer.from_pretrained("gpt2")
 ```
 
 2. Or use small models that work well on CPU
+
+### Issue: GPU environment creation fails with dependency conflicts
+
+**Symptoms:**
+```bash
+ModuleNotFoundError: No module named 'torch'
+```
+
+or
+
+```bash
+ERROR: Cannot install ... because these package versions have conflicting dependencies
+```
+
+**Explanation:**
+`vllm==0.3.0` requires `torch==2.1.2`. If the environment pins newer PyTorch versions, pip resolution fails. Also, explicitly pinning `flash-attn` can trigger metadata generation before `torch` is installed.
+
+**Solution:**
+Use the repo's updated `ray_2x_gpu.yml`, which aligns PyTorch with `vllm==0.3.0` and lets vLLM manage compatible flash-attention dependencies transitively.
 
 ### Issue: CUDA version mismatch
 
@@ -230,7 +249,7 @@ print("All tests passed!")
 |---------|----------------|-----------------|------------------|
 | Python | 3.11 | 3.11 | 3.7 |
 | Ray | 2.40.0 | 2.40.0 | 1.3.0 |
-| PyTorch | 2.2.0 (CPU) | 2.2.0 (GPU) | 1.8.1 |
+| PyTorch | 2.2.0 (CPU) | 2.1.2 (GPU) | 1.8.1 |
 | CUDA | N/A | 11.8 | 10.2 |
 | vLLM | ❌ | ✅ | ❌ |
 | Use Case | Testing | Production | Legacy |

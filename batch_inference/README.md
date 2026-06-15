@@ -27,11 +27,7 @@ Test the pipeline without GPUs using a small model:
 
 ```bash
 # Submit to LSF
-bsub -n 4 -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray_cpu \
-  -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" \
-  -m 10000000000
+bsub < batch_inference/submit_cpu.lsf
 ```
 
 ### 3. GPU Inference (Production)
@@ -39,12 +35,7 @@ bsub -n 4 -o output.%J \
 Run with GPU acceleration:
 
 ```bash
-# Submit to LSF with 8 GPUs (1 per task, exclusive access)
-bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray_gpu \
-  -c "python batch_inference/batch_infer_vllm_actors.py" \
-  -m 20000000000
+bsub < batch_inference/submit_gpu.lsf
 ```
 
 ## Architecture
@@ -87,9 +78,10 @@ Edit `config.yaml` to customize:
 
 ```yaml
 model:
-  name: "meta-llama/Llama-2-7b-hf"  # HuggingFace model or local path
+  name: "meta-llama/Llama-2-7b-hf"   # HuggingFace model or local path
   tensor_parallel_size: 1            # GPUs per model instance
   max_model_len: 2048                # Maximum sequence length
+  dtype: "half"                      # Safe default for T4/V100-class GPUs
 
 execution:
   num_workers: "auto"                # "auto" or specific number
@@ -98,8 +90,8 @@ execution:
   cpu_only: false                    # Force CPU-only mode
 
 data:
-  input_path: "dataset/sample_prompts.jsonl"
-  output_path: "output/results.jsonl"
+  input_path: "batch_inference/dataset/sample_prompts.jsonl"
+  output_path: "batch_inference/output/results.jsonl"
 
 generation:
   temperature: 0.7
@@ -112,15 +104,11 @@ generation:
 ### Pattern 1: CPU-Only (Testing)
 
 ```bash
-bsub -n 8 -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray_cpu \
-  -c "python batch_inference/batch_infer_vllm_actors.py --cpu-only --model gpt2" \
-  -m 10000000000
+bsub < batch_inference/submit_cpu.lsf
 ```
 
 **Explanation:**
-- `-n 8`: Request 8 CPU slots
+- Uses `batch_inference/submit_cpu.lsf`
 - `-o output.%J`: Output file with job ID
 - No GPU specification
 - Uses small model (gpt2) for testing
@@ -128,19 +116,20 @@ bsub -n 8 -o output.%J \
 ### Pattern 2: GPU with Exclusive Access (Production)
 
 ```bash
-bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray_gpu \
-  -c "python batch_inference/batch_infer_vllm_actors.py" \
-  -m 20000000000
+bsub < batch_inference/submit_gpu.lsf
 ```
 
 **Explanation:**
-- `-n 8`: Request 8 slots
-- `-gpu "num=1/task:j_exclusive=yes"`: 1 GPU per task, exclusive access
+- Uses `batch_inference/submit_gpu.lsf`
+- Current default configuration requests 4 tasks with 1 GPU per task (4 GPUs total)
 - `j_exclusive=yes`: Prevents GPU sharing between jobs
 - LSF sets `CUDA_VISIBLE_DEVICES` automatically
 - Ray auto-detects GPUs from environment
+
+### GPU Compatibility Note
+
+- The default GPU config uses `model.dtype: "half"` to support Tesla T4-class GPUs.
+- If your cluster has newer GPUs with compute capability 8.0+, you can change this to `bfloat16` or `auto`.
 
 ### Optional LSF Parameters
 
@@ -148,7 +137,7 @@ Add these to customize resource requirements:
 
 ```bash
 # Specify queue
--q gpu_queue
+-q normal
 
 # Set memory limit
 -M 100GB
@@ -160,17 +149,7 @@ Add these to customize resource requirements:
 -R "rusage[mem=10GB]"
 
 # Complete example
-bsub -n 8 \
-  -gpu "num=1/task:j_exclusive=yes" \
-  -q gpu_queue \
-  -M 100GB \
-  -W 2:00 \
-  -R "rusage[mem=10GB]" \
-  -o output.%J \
-  ./ray_launch_cluster.sh \
-  -n ray_gpu \
-  -c "python batch_inference/batch_infer_vllm_actors.py" \
-  -m 20000000000
+bsub < batch_inference/submit_gpu.lsf
 ```
 
 ## Scaling Guidelines

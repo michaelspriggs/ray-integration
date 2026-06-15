@@ -51,6 +51,7 @@ class VLLMWorker:
         gpu_memory_utilization: float = 0.9,
         quantization: Optional[str] = None,
         cpu_only: bool = False,
+        dtype: str = "half",
     ):
         """
         Initialize vLLM engine.
@@ -63,6 +64,7 @@ class VLLMWorker:
             gpu_memory_utilization: GPU memory utilization (0.0-1.0)
             quantization: Quantization method (awq, gptq, or None)
             cpu_only: Use CPU-only mode for testing
+            dtype: Model dtype for vLLM (for example: auto, half, float16, bfloat16)
         """
         self.model_name = model_name
         self.cpu_only = cpu_only
@@ -93,6 +95,7 @@ class VLLMWorker:
                     max_num_seqs=max_num_seqs,
                     gpu_memory_utilization=gpu_memory_utilization,
                     quantization=quantization,
+                    dtype=dtype,
                 )
             
             self.SamplingParams = SamplingParams
@@ -175,8 +178,11 @@ def load_prompts(input_path: str, max_prompts: Optional[int] = None) -> List[str
     """
     prompts = []
     with open(input_path, 'r') as f:
-        for i, line in enumerate(f):
-            if max_prompts and i >= max_prompts:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            if max_prompts and len(prompts) >= max_prompts:
                 break
             data = json.loads(line)
             prompt = data.get('text') or data.get('prompt')
@@ -262,6 +268,7 @@ def create_workers(
                 gpu_memory_utilization=model_config['gpu_memory_utilization'],
                 quantization=model_config.get('quantization'),
                 cpu_only=False,
+                dtype=model_config.get('dtype', 'half'),
             )
         workers.append(worker)
         logger.info(f"Created worker {i+1}/{num_workers}")

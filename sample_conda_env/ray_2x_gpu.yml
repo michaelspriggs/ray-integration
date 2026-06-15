@@ -36,9 +36,9 @@ dependencies:
     - ray[data]==2.40.0
     
     # Machine Learning frameworks (GPU versions)
-    - torch==2.2.0
-    - torchvision==0.17.0
-    - torchaudio==2.2.0
+    - torch==2.1.2
+    - torchvision==0.16.2
+    - torchaudio==2.1.2
     
     # LLM inference with GPU support
     - vllm==0.3.0
@@ -48,7 +48,8 @@ dependencies:
     - bitsandbytes==0.42.0
     
     # Flash attention for performance
-    - flash-attn==2.5.0
+    # flash-attn is pulled transitively by vLLM; avoid explicit install here
+    # because pip may try to build metadata before torch is available.
     
     # Data handling
     - datasets==2.17.0
