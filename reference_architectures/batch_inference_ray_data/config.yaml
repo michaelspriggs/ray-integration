@@ -49,10 +49,10 @@ execution:
 
 data:
   # Input data path (JSONL format with "text" or "prompt" field)
-  input_path: "batch_inference/dataset/sample_prompts.jsonl"
+  input_path: "reference_architectures/batch_inference_ray_data/dataset/sample_prompts.jsonl"
   
-  # Output path for results
-  output_path: "batch_inference/output/results.jsonl"
+  # Output path for results. %J or {job_id} will be replaced with the LSF job ID.
+  output_path: "reference_architectures/batch_inference_ray_data/output/results.%J.jsonl"
   
   # Maximum number of prompts to process (null for all)
   max_prompts: null
@@ -83,18 +83,21 @@ logging:
   # Log interval (seconds)
   log_interval: 10
 
-# LSF-specific settings (for documentation)
+# LSF submission settings consumed by submit_lsf.sh.
+# Users should only need to edit this file for their environment.
 lsf:
-  # Example CPU-only submission:
-  # bsub -n 8 -o output.%J ./ray_launch_cluster.sh -n ray_cpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
-  
-  # Example GPU submission:
-  # bsub -n 4 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./ray_launch_cluster.sh -n ray_gpu -c "python batch_inference/batch_infer_vllm_actors.py" -m 20000000000
-  
-  # Optional parameters:
-  # -q queue_name          # Specify queue
-  # -M 100GB               # Memory limit
-  # -W 2:00                # Wall time limit (hours:minutes)
-  # -R "rusage[mem=10GB]"  # Memory reservation per task
+  queue: "normal"
+  job_name: "ray_batch"
+  output_log: "reference_architectures/batch_inference_ray_data/output/output.%J"
+  workload_script: "workload_actors.py"
+  num_nodes: 2
+  tasks_per_node: 1
+  cpus_per_task: 4
+  gpus_per_task: 1
+  walltime: "01:00"
+  memory: "8GB"
+  memory_per_task: "8GB"
+  ray_object_store_memory_bytes: 8000000000
+  gpu_mode: "j_exclusive=yes"
 
 # Made with Bob

@@ -193,16 +193,25 @@ def load_prompts(input_path: str, max_prompts: Optional[int] = None) -> List[str
     return prompts
 
 
+def resolve_output_path(output_path: str) -> str:
+    """Resolve output path placeholders using the current job environment."""
+    job_id = os.environ.get("LSB_JOBID")
+    if job_id:
+        output_path = output_path.replace("%J", job_id).replace("{job_id}", job_id)
+    return output_path
+
+
 def save_results(results: List[Dict[str, Any]], output_path: str):
     """Save results to JSONL file."""
-    output_file = Path(output_path)
+    resolved_output_path = resolve_output_path(output_path)
+    output_file = Path(resolved_output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
-    with open(output_path, 'w') as f:
+    with open(resolved_output_path, 'w') as f:
         for result in results:
             f.write(json.dumps(result) + '\n')
     
-    logger.info(f"Saved {len(results)} results to {output_path}")
+    logger.info(f"Saved {len(results)} results to {resolved_output_path}")
 
 
 def create_workers(
@@ -292,6 +301,8 @@ def run_batch_inference(
     Returns:
         List of results
     """
+    config['data']['output_path'] = resolve_output_path(config['data']['output_path'])
+
     batch_size = config['execution']['batch_size']
     gen_config = config['generation']
     show_progress = config['logging'].get('show_progress', True)
@@ -343,7 +354,7 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="batch_inference/config.yaml",
+        default="reference_architectures/batch_inference_ray_data/config.yaml",
         help="Path to configuration file"
     )
     parser.add_argument(
@@ -392,13 +403,13 @@ def main():
     logger.info(f"Input: {config['data']['input_path']}")
     logger.info(f"Output: {config['data']['output_path']}")
     
-    # Connect to Ray cluster (should already be running via ray_launch_cluster.sh)
+    # Connect to Ray cluster (should already be running via common/start_ray_cluster.sh)
     try:
         ray.init(address="auto")
         logger.info("Connected to Ray cluster")
     except Exception as e:
         logger.error(f"Failed to connect to Ray cluster: {e}")
-        logger.info("Make sure Ray cluster is running via ray_launch_cluster.sh")
+        logger.info("Make sure Ray cluster is running via common/start_ray_cluster.sh")
         sys.exit(1)
     
     # Get cluster resources

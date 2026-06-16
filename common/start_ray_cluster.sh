@@ -10,10 +10,10 @@
 #
 #Examples:
 # CPU-only:
-#   bsub -n 8 -o output.%J ./ray_launch_cluster.sh -n ray_cpu -c "python workload.py" -m 20000000000
+#   bsub -n 8 -o output.%J ./common/start_ray_cluster.sh -n ray_cpu -c "python reference_architectures/batch_inference_ray_data/workload_actors.py --config reference_architectures/batch_inference_ray_data/config.yaml --cpu-only --model gpt2" -m 20000000000
 #
 # GPU with exclusive access:
-#   bsub -n 8 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./ray_launch_cluster.sh -n ray_gpu -c "python workload.py" -m 20000000000
+#   bsub -n 4 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./common/start_ray_cluster.sh -n ray_gpu -c "python reference_architectures/batch_inference_ray_data/workload_actors.py --config reference_architectures/batch_inference_ray_data/config.yaml" -m 20000000000
 #
 # Optional LSF parameters:
 #   -q queue_name          # Specify queue

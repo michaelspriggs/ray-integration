@@ -50,8 +50,6 @@ with open(config_path, "r") as f:
             parsed = ""
         elif value[0] in ("'", '"') and value[-1] == value[0]:
             parsed = value[1:-1]
-        elif value.lower() in ("true", "false"):
-            parsed = value.lower()
         else:
             parsed = value
 
@@ -63,45 +61,31 @@ def require(name):
         raise SystemExit(f"Missing required config value: lsf.{name}")
     return value
 
-queue = require("queue")
-job_name = require("job_name")
-output_log = require("output_log")
-num_nodes = int(require("num_nodes"))
-tasks_per_node = int(require("tasks_per_node"))
-cpus_per_task = int(require("cpus_per_task"))
-gpus_per_task = int(require("gpus_per_task"))
-walltime = require("walltime")
-memory = require("memory")
-memory_per_task = require("memory_per_task")
-gpu_mode = require("gpu_mode")
+workload_script = require("workload_script")
+ray_object_store_memory_bytes = int(require("ray_object_store_memory_bytes"))
 
-total_tasks = num_nodes * tasks_per_node
-run_script_path = (script_dir / "run.sh").resolve()
+workload_path = (script_dir / workload_script).resolve()
 
 def emit(name, value):
     print(f"{name}={shlex.quote(str(value))}")
 
-emit("QUEUE", queue)
-emit("JOB_NAME", job_name)
-emit("OUTPUT_LOG", output_log)
-emit("TOTAL_TASKS", total_tasks)
-emit("CPUS_PER_TASK", cpus_per_task)
-emit("GPUS_PER_TASK", gpus_per_task)
-emit("WALLTIME", walltime)
-emit("MEMORY", memory)
-emit("MEMORY_PER_TASK", memory_per_task)
-emit("GPU_MODE", gpu_mode)
-emit("RUN_SCRIPT_PATH", run_script_path)
+emit("WORKLOAD_PATH", workload_path)
+emit("CONFIG_PATH_VALUE", config_path)
+emit("RAY_OBJECT_STORE_MEMORY_BYTES", ray_object_store_memory_bytes)
 PY
 )"
 
-bsub \
-  -J "${JOB_NAME}" \
-  -q "${QUEUE}" \
-  -n "${TOTAL_TASKS}" \
-  -R "span[ptile=1] rusage[mem=${MEMORY_PER_TASK}]" \
-  -M "${MEMORY}" \
-  -W "${WALLTIME}" \
-  -gpu "num=${GPUS_PER_TASK}/task:${GPU_MODE}" \
-  -o "${OUTPUT_LOG}" \
-  "${RUN_SCRIPT_PATH}"
+if ! command -v ray >/dev/null 2>&1; then
+  echo "ERROR: 'ray' is not available in PATH." >&2
+  echo "Run this workflow from an already-activated environment that contains Ray and the workload dependencies." >&2
+  exit 1
+fi
+
+echo "Using python: $(command -v python)"
+echo "Using ray: $(command -v ray)"
+
+echo "Starting Ray cluster and running workload..."
+"${REPO_ROOT}/common/start_ray_cluster.sh" \
+  -c "python ${WORKLOAD_PATH} --config ${CONFIG_PATH_VALUE}" \
+  -m "${RAY_OBJECT_STORE_MEMORY_BYTES}"
+

@@ -10,6 +10,23 @@ This repository is organized around a clear separation between:
 - **legacy Ray 1.x content** in `legacy/`
 - **small validation examples** in `examples/`
 
+## Prerequisites
+
+Before using this repository, ensure the following are available:
+
+- **IBM Spectrum LSF is installed and configured**
+- **A home directory is shared across all cluster hosts**
+  - the submission host and all execution hosts must see the same repository checkout and user environment paths
+- **A conda environment with Ray installed**
+  - for GPU workflows, the validated example environment is activated with:
+    ```bash
+    conda activate ray_gpu
+    ```
+  - environment setup examples are provided in:
+    - [`sample_conda_env/README.md`](sample_conda_env/README.md)
+    - [`sample_conda_env/ray_2x_cpu.yml`](sample_conda_env/ray_2x_cpu.yml)
+    - [`sample_conda_env/ray_2x_gpu.yml`](sample_conda_env/ray_2x_gpu.yml)
+
 ## Repository Layout
 
 ```text
@@ -82,9 +99,17 @@ Then follow:
 
 ## Environment Notes
 
-The repository currently retains the existing `sample_conda_env/` directory for environment setup compatibility during migration. See:
+Activate the appropriate conda environment before submitting workloads. For example:
+
+```bash
+conda activate ray_gpu
+```
+
+The repository retains `sample_conda_env/` for environment setup and validation. See:
 
 - [`sample_conda_env/README.md`](sample_conda_env/README.md)
+- [`sample_conda_env/ray_2x_cpu.yml`](sample_conda_env/ray_2x_cpu.yml)
+- [`sample_conda_env/ray_2x_gpu.yml`](sample_conda_env/ray_2x_gpu.yml)
 
 ## Legacy Note
 
