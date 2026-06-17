@@ -134,4 +134,9 @@ lsf:
   # When true, constrain the allocation to a single host.
   restrict_to_single_host: false
 
+  # When true, submit the job in interactive mode (-Is flag).
+  # Useful for debugging as it captures output directly to the terminal.
+  # Note: Interactive jobs block the terminal until completion.
+  interactive: false
+
 # Made with Bob

@@ -80,7 +80,11 @@ lsf:
   gpus_per_worker: 1
   memory_per_worker: "8GB"
   restrict_to_single_host: false
+  queue: "normal"              # Optional: LSF queue name
+  interactive: false           # Set to true for interactive debugging
 ```
+
+**Note:** For interactive mode, remove or comment out the `queue` field to use the interactive queue.
 
 ---
 
@@ -195,11 +199,52 @@ Best for: Simplicity and large datasets
 
 # 🚀 Running the Example
 
+## Prerequisites
+
+Activate the conda environment before submitting jobs:
+
+```bash
+# Activate the appropriate environment
+conda activate ray_gpu  # or ray_cpu for CPU-only
+```
+
+This ensures PyYAML is available for config validation.
+
+---
+
 ## Submit to LSF
+
+Basic submission (uses `config.yaml` in current directory):
 
 ```bash
 ./submit_lsf.sh
 ```
+
+With custom config file:
+
+```bash
+./submit_lsf.sh --config my_config.yaml
+```
+
+---
+
+## Interactive Mode (for debugging)
+
+Set `interactive: true` in your config and remove/comment out the `queue` field:
+
+```yaml
+lsf:
+  # queue: "normal"  # Comment out for interactive mode
+  interactive: true
+```
+
+Then submit:
+
+```bash
+./submit_lsf.sh --config debug_config.yaml
+```
+
+The job will run interactively, showing output directly in your terminal.
 
 ---
 
@@ -212,6 +257,8 @@ CONFIG_PATH=... ./run.sh
 ---
 
 ## Dry run
+
+Preview the bsub command without submitting:
 
 ```bash
 DRY_RUN=true ./submit_lsf.sh
