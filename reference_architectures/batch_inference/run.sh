@@ -96,8 +96,6 @@ trap cleanup EXIT
 # --------------------------------------------
 echo "=== Starting Ray cluster ==="
 
-START_CMD=("${REPO_ROOT}/common/start_ray_cluster.sh")
-
 if [[ -n "${RAY_OBJ_STORE:-}" ]]; then
   export RAY_OBJECT_STORE_MEMORY_BYTES="${RAY_OBJ_STORE}"
 fi
@@ -105,22 +103,30 @@ fi
 # Dry-run support
 if [[ "${DRY_RUN:-false}" == "true" ]]; then
   echo "[DRY RUN] Cluster start command:"
-  printf ' %q' "${START_CMD[@]}"
+  echo "  ${REPO_ROOT}/common/start_ray_cluster.sh"
   echo
 else
-  "${START_CMD[@]}"
+  # Start the cluster
+  "${REPO_ROOT}/common/start_ray_cluster.sh"
+  
+  # Read RAY_ADDRESS from file
+  RAY_INFO_FILE="/tmp/ray-${USER}-${LSB_JOBID}.env"
+  
+  if [[ ! -f "$RAY_INFO_FILE" ]]; then
+    echo "ERROR: Ray info file not found: $RAY_INFO_FILE" >&2
+    exit 1
+  fi
+  
+  source "$RAY_INFO_FILE"
+  
+  if [[ -z "${RAY_ADDRESS:-}" ]]; then
+    echo "ERROR: RAY_ADDRESS not set" >&2
+    exit 1
+  fi
+  
+  echo "RAY_ADDRESS=${RAY_ADDRESS}"
+  echo ""
 fi
-
-# --------------------------------------------
-# Validate cluster
-# --------------------------------------------
-if [[ -z "${RAY_ADDRESS:-}" ]]; then
-  echo "ERROR: RAY_ADDRESS not set after cluster startup." >&2
-  exit 1
-fi
-
-echo "RAY_ADDRESS=${RAY_ADDRESS}"
-echo ""
 
 echo "=== Ray Cluster Status ==="
 ray status --address "${RAY_ADDRESS}" || true
@@ -129,6 +135,9 @@ echo ""
 # --------------------------------------------
 # Build workload command safely
 # --------------------------------------------
+# Add repo root to PYTHONPATH so common module can be imported
+export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
+
 WORKLOAD_CMD=(python "${WORKLOAD_PATH}" --config "${CONFIG_PATH_VALUE}")
 
 echo "=== Running Workload ==="

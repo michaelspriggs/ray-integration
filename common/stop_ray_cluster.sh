@@ -35,4 +35,3 @@ if [[ -n "${RAY_TMPDIR:-}" && -d "${RAY_TMPDIR}" ]]; then
 fi
 
 echo "=== Ray cluster stopped ==="
-``

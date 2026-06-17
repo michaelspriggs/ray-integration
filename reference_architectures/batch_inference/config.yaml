@@ -9,7 +9,6 @@
 model:
   # Model name from HuggingFace or local path
   # IBM Granite model for code generation and general tasks
-  # Note: Replace with your preferred IBM Granite model (e.g., ibm-granite/granite-3b-code-instruct, ibm-granite/granite-8b-code-instruct)
   name: "ibm-granite/granite-3b-code-base"
   
   # Tensor parallelism: number of GPUs per model instance
@@ -23,7 +22,7 @@ model:
   #   num_workers=2, gpus_per_worker=2, tensor_parallel_size=2 → 2 model instances
 
   # Maximum sequence length
-  max_model_len: 2048
+  max_model_len: 2048  # Granite 3B supports up to 2048 tokens
   
   # Maximum number of sequences to process in parallel
   max_num_seqs: 256
@@ -52,7 +51,8 @@ execution:
   num_workers: "auto"
 
   # Number of CPU cores each worker should use
-  cpus_per_worker: 4  # enforced by Ray, not LSF
+  # Must be <= (total CPUs in cluster / num_workers)
+  cpus_per_worker: 1  # enforced by Ray, not LSF
   
   # Batch size for inference
   batch_size: 16
@@ -123,7 +123,7 @@ lsf:
   output_log: "reference_architectures/batch_inference/output/output.%J"
 
   # Total number of workers to request for this job.
-  num_workers: 2
+  num_workers: 4
 
   # Number of GPUs requested per worker.
   gpus_per_worker: 1

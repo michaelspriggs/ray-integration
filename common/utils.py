@@ -62,7 +62,11 @@ def load_jsonl_prompts(
             if max_prompts and len(prompts) >= max_prompts:
                 break
 
-            data = json.loads(line.strip())
+            line = line.strip()
+            if not line:  # Skip empty lines
+                continue
+
+            data = json.loads(line)
             prompt = data.get("text") or data.get("prompt")
 
             if prompt:

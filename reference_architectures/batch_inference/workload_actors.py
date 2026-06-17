@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -46,12 +47,19 @@ class VLLMWorker:
         self.model_name = model_name
         self.cpu_only = cpu_only
 
-        logger.info(f"Initializing worker model={model_name} tp={tensor_parallel_size}")
-        logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}")
+        msg = f"[Actor {os.getpid()}] Initializing worker model={model_name} tp={tensor_parallel_size}"
+        print(msg, flush=True)
+        logger.info(msg)
+        
+        msg = f"[Actor {os.getpid()}] CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}"
+        print(msg, flush=True)
+        logger.info(msg)
 
         try:
+            print(f"[Actor {os.getpid()}] Importing vLLM...", flush=True)
             from vllm import LLM, SamplingParams
 
+            print(f"[Actor {os.getpid()}] Creating LLM instance...", flush=True)
             if cpu_only:
                 self.llm = LLM(
                     model=model_name,
@@ -72,10 +80,14 @@ class VLLMWorker:
                 )
 
             self.SamplingParams = SamplingParams
-            logger.info("Worker initialized successfully")
+            msg = f"[Actor {os.getpid()}] Worker initialized successfully"
+            print(msg, flush=True)
+            logger.info(msg)
 
         except Exception as e:
-            logger.error(f"Failed to initialize model: {e}")
+            msg = f"[Actor {os.getpid()}] Failed to initialize model: {e}"
+            print(msg, flush=True)
+            logger.error(msg)
             raise
 
     def generate(self, prompts: List[str], params: Dict[str, Any]):

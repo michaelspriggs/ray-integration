@@ -18,17 +18,20 @@ echo ""
 # --------------------------------------------
 # Build host list
 # --------------------------------------------
+# Get unique hosts
 mapfile -t hosts < <(sort "$LSB_DJOB_HOSTFILE" | uniq)
-echo "Hosts: ${hosts[*]}"
+echo "Unique hosts: ${hosts[*]}"
 
-# Count cores per host
-declare -A cores_per_host
+# Count total tasks (CPU slots) per host
+declare -A cores_per_host=()
+
 while read -r h; do
-  ((cores_per_host[$h]++))
+  cores_per_host["$h"]=$(( ${cores_per_host["$h"]:-0} + 1 ))
 done < "$LSB_DJOB_HOSTFILE"
 
+echo "Tasks per host:"
 for h in "${!cores_per_host[@]}"; do
-  echo "Host $h has ${cores_per_host[$h]} CPU slots"
+  echo "  $h: ${cores_per_host[$h]} tasks"
 done
 
 # --------------------------------------------
@@ -73,16 +76,15 @@ num_cpu_head="${cores_per_host[$head_node]}"
 
 echo "Starting Ray head..."
 blaunch -z "$head_node" \
-  ray start --head \
-    --port "$port" \
-    --dashboard-port "$dashboard_port" \
-    --num-cpus "$num_cpu_head" \
-    --object-store-memory "$object_store_mem" \
+  "ray start --head \
+    --port $port \
+    --dashboard-port $dashboard_port \
+    --num-cpus $num_cpu_head \
+    --object-store-memory $object_store_mem \
     --dashboard-host 0.0.0.0 \
-    --node-ip-address "$head_node_ip" \
-  &
+    --node-ip-address $head_node_ip" &
 
-sleep 10
+sleep 5
 
 # Wait for head
 echo "Waiting for Ray head..."
@@ -103,31 +105,33 @@ for host in "${workers[@]}"; do
   num_cpu="${cores_per_host[$host]}"
 
   blaunch -z "$host" \
-    ray start \
-      --address "$head_node_ip:$port" \
-      --num-cpus "$num_cpu" \
-      --object-store-memory "$object_store_mem" \
-    &
+    "ray start \
+      --address $head_node_ip:$port \
+      --num-cpus $num_cpu \
+      --object-store-memory $object_store_mem" &
 
   # Wait for worker
+  sleep 3
   until blaunch -z "$host" ray status --address "$head_node_ip:$port" >/dev/null 2>&1; do
     echo "Waiting for worker $host..."
-    sleep 3
+    sleep 2
   done
 
   echo "Worker $host joined ✔"
 done
 
 # --------------------------------------------
-# Export connection info
+# Write connection info to file for parent script
 # --------------------------------------------
-export RAY_ADDRESS="$head_node_ip:$port"
-echo "RAY_ADDRESS=$RAY_ADDRESS"
+RAY_ADDRESS="$head_node_ip:$port"
+RAY_INFO_FILE="/tmp/ray-${USER}-${LSB_JOBID}.env"
+
+echo "RAY_ADDRESS=${RAY_ADDRESS}" > "$RAY_INFO_FILE"
 
 echo ""
 echo "=== Ray Cluster Ready ==="
 ray status --address "$RAY_ADDRESS"
 echo ""
+echo "Ray address written to: $RAY_INFO_FILE"
 
 # Return control (IMPORTANT: no workload here!)
-``
