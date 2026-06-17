@@ -1,6 +1,11 @@
 # Ray + vLLM Batch Inference Configuration
 # This configuration supports both CPU and GPU inference modes
 
+# Constraints:
+# - execution.num_workers <= lsf.num_workers
+# - (lsf.num_workers × lsf.gpus_per_worker) % model.tensor_parallel_size == 0
+# - Ensure memory_per_worker is sufficient for model + batch + Ray overhead
+
 model:
   # Model name from HuggingFace or local path
   # IBM Granite model for code generation and general tasks
@@ -10,7 +15,13 @@ model:
   # Tensor parallelism: number of GPUs per model instance
   # Options: 1, 2, 4, 8, or "auto" to use all available GPUs per worker
   tensor_parallel_size: 1
-  
+ 
+  # Effective number of model instances (workers) =
+  #   (lsf.num_workers × lsf.gpus_per_worker) / tensor_parallel_size
+  #
+  # Example:
+  #   num_workers=2, gpus_per_worker=2, tensor_parallel_size=2 → 2 model instances
+
   # Maximum sequence length
   max_model_len: 2048
   
@@ -30,22 +41,38 @@ model:
   quantization: null
 
 execution:
-  # Number of vLLM worker actors
-  # "auto" will create one actor per available GPU (or per tensor_parallel_size GPUs)
-  # For CPU mode, set to number of desired workers
+  # Workload implementation to run.
+  # Options: "ray_data" or "actors"
+  mode: "actors"
+
+  # Number of workers to use (<= lsf.num_workers)
+  # In "actors" mode: Ray actors
+  # In "ray_data" mode: parallel workers processing dataset partitions
+  # "auto" = use all workers allocated by LSF
   num_workers: "auto"
+
+  # Number of CPU cores each worker should use
+  cpus_per_worker: 4  # enforced by Ray, not LSF
   
   # Batch size for inference
   batch_size: 16
   
-  # Use GPU if available (set to false for CPU-only testing)
-  use_gpu: true
-  
-  # CPU-only mode (for testing without GPUs)
-  cpu_only: false
+  # Device selection
+  device: "gpu"   # gpu | cpu
   
   # Maximum retries for failed tasks
   max_retries: 3
+
+ray:
+  # Ray object store memory passed to common/start_ray_cluster.sh
+  # Must fit within available memory per node: (lsf.memory_per_worker × workers_per_node)
+  object_store_memory_bytes: 8000000000
+
+  # Must fit within available memory per node.
+  # Total memory per node is approximately:
+  #   workers_per_node × memory_per_worker
+  #
+  # Recommended: object_store_memory ≈ 20–40% of node memory
 
 data:
   # Input data path (JSONL format with "text" or "prompt" field)
@@ -83,21 +110,28 @@ logging:
   # Log interval (seconds)
   log_interval: 10
 
-# LSF submission settings consumed by submit_lsf.sh.
-# Users should only need to edit this file for their environment.
 lsf:
+  # Total GPUs allocated = num_workers × gpus_per_worker
+
+  # LSF queue name. Leave unset to let LSF choose the default queue.
   queue: "normal"
+
+  # Job name shown in LSF tools such as bjobs and bhist.
   job_name: "ray_batch"
+
+  # Standard output log path for the LSF job. %J expands to the LSF job ID.
   output_log: "reference_architectures/batch_inference_ray_data/output/output.%J"
-  workload_script: "workload_actors.py"
-  num_nodes: 2
-  tasks_per_node: 1
-  cpus_per_task: 4
-  gpus_per_task: 1
-  walltime: "01:00"
-  memory: "8GB"
-  memory_per_task: "8GB"
-  ray_object_store_memory_bytes: 8000000000
-  gpu_mode: "j_exclusive=yes"
+
+  # Total number of workers to request for this job.
+  num_workers: 2
+
+  # Number of GPUs requested per worker.
+  gpus_per_worker: 1
+
+  # Memory requested per worker.
+  memory_per_worker: "8GB"
+
+  # When true, constrain the allocation to a single host.
+  restrict_to_single_host: false
 
 # Made with Bob

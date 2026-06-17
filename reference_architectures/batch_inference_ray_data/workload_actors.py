@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-Batch Inference with vLLM on Ray + LSF
-
-This script demonstrates distributed batch inference using:
-- Ray 2.x for distributed execution
-- vLLM for efficient LLM inference
-- LSF for resource management
-
-The script automatically detects GPUs via CUDA_VISIBLE_DEVICES set by LSF
-and creates vLLM actors accordingly.
-"""
 
 import argparse
 import json
@@ -22,445 +11,254 @@ from typing import Dict, List, Optional, Any
 
 import ray
 import yaml
-from tqdm import tqdm
 
 
-# Configure logging
+# --------------------------------------------
+# Logging
+# --------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
+# --------------------------------------------
+# Ray Actor
+# --------------------------------------------
 @ray.remote
 class VLLMWorker:
-    """
-    Ray actor that wraps a vLLM engine for batch inference.
-    
-    Each actor can use one or more GPUs (tensor parallelism) and processes
-    batches of prompts independently.
-    """
-    
     def __init__(
         self,
         model_name: str,
-        tensor_parallel_size: int = 1,
-        max_model_len: int = 2048,
-        max_num_seqs: int = 256,
-        gpu_memory_utilization: float = 0.9,
-        quantization: Optional[str] = None,
-        cpu_only: bool = False,
-        dtype: str = "half",
+        tensor_parallel_size: int,
+        max_model_len: int,
+        max_num_seqs: int,
+        gpu_memory_utilization: float,
+        quantization: Optional[str],
+        dtype: str,
+        cpu_only: bool,
     ):
-        """
-        Initialize vLLM engine.
-        
-        Args:
-            model_name: HuggingFace model name or local path
-            tensor_parallel_size: Number of GPUs for tensor parallelism
-            max_model_len: Maximum sequence length
-            max_num_seqs: Maximum number of sequences in parallel
-            gpu_memory_utilization: GPU memory utilization (0.0-1.0)
-            quantization: Quantization method (awq, gptq, or None)
-            cpu_only: Use CPU-only mode for testing
-            dtype: Model dtype for vLLM (for example: auto, half, float16, bfloat16)
-        """
+        from vllm import LLM, SamplingParams
+
         self.model_name = model_name
         self.cpu_only = cpu_only
-        
-        logger.info(f"Initializing vLLM worker with model: {model_name}")
-        logger.info(f"Tensor parallel size: {tensor_parallel_size}")
-        logger.info(f"CPU-only mode: {cpu_only}")
-        
-        try:
-            from vllm import LLM, SamplingParams
-            
-            # Initialize vLLM engine
-            if cpu_only:
-                # CPU-only mode for testing
-                self.llm = LLM(
-                    model=model_name,
-                    tensor_parallel_size=1,
-                    max_model_len=max_model_len,
-                    max_num_seqs=max_num_seqs,
-                    device="cpu",
-                )
-            else:
-                # GPU mode - vLLM will use CUDA_VISIBLE_DEVICES
-                self.llm = LLM(
-                    model=model_name,
-                    tensor_parallel_size=tensor_parallel_size,
-                    max_model_len=max_model_len,
-                    max_num_seqs=max_num_seqs,
-                    gpu_memory_utilization=gpu_memory_utilization,
-                    quantization=quantization,
-                    dtype=dtype,
-                )
-            
-            self.SamplingParams = SamplingParams
-            logger.info("vLLM worker initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize vLLM: {e}")
-            raise
-    
-    def generate(
-        self,
-        prompts: List[str],
-        temperature: float = 0.7,
-        top_p: float = 0.9,
-        max_tokens: int = 512,
-        n: int = 1,
-        stop: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Generate completions for a batch of prompts.
-        
-        Args:
-            prompts: List of input prompts
-            temperature: Sampling temperature
-            top_p: Top-p sampling parameter
-            max_tokens: Maximum tokens to generate
-            n: Number of completions per prompt
-            stop: Stop sequences
-            
-        Returns:
-            List of results with generated text and metadata
-        """
-        try:
-            sampling_params = self.SamplingParams(
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                n=n,
-                stop=stop,
+
+        logger.info(f"[Worker] Starting model={model_name} tp={tensor_parallel_size}")
+
+        if cpu_only:
+            self.llm = LLM(
+                model=model_name,
+                device="cpu",
+                max_model_len=max_model_len,
+                max_num_seqs=max_num_seqs,
             )
-            
-            outputs = self.llm.generate(prompts, sampling_params)
-            
-            results = []
-            for output in outputs:
-                result = {
-                    "prompt": output.prompt,
-                    "generated_text": [o.text for o in output.outputs],
-                    "finish_reason": [o.finish_reason for o in output.outputs],
-                    "num_tokens": [len(o.token_ids) for o in output.outputs],
-                }
-                results.append(result)
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Generation failed: {e}")
-            raise
-    
-    def get_model_info(self) -> Dict[str, Any]:
-        """Get information about the loaded model."""
-        return {
-            "model_name": self.model_name,
-            "cpu_only": self.cpu_only,
-        }
+        else:
+            self.llm = LLM(
+                model=model_name,
+                tensor_parallel_size=tensor_parallel_size,
+                max_model_len=max_model_len,
+                max_num_seqs=max_num_seqs,
+                gpu_memory_utilization=gpu_memory_utilization,
+                quantization=quantization,
+                dtype=dtype,
+            )
+
+        self.SamplingParams = SamplingParams
+
+    def generate(self, prompts: List[str], params: Dict[str, Any]):
+        sampling = self.SamplingParams(**params)
+        outputs = self.llm.generate(prompts, sampling)
+
+        results = []
+        for o in outputs:
+            results.append({
+                "prompt": o.prompt,
+                "generated_text": [x.text for x in o.outputs],
+                "finish_reason": [x.finish_reason for x in o.outputs],
+                "num_tokens": [len(x.token_ids) for x in o.outputs],
+            })
+        return results
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    """Load configuration from YAML file."""
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    return config
+# --------------------------------------------
+# Utilities
+# --------------------------------------------
+def load_config(path: str):
+    return yaml.safe_load(open(path))
 
 
-def load_prompts(input_path: str, max_prompts: Optional[int] = None) -> List[str]:
-    """
-    Load prompts from JSONL file.
-    
-    Expected format: {"text": "prompt"} or {"prompt": "prompt"}
-    """
+def load_prompts(path: str, max_prompts=None):
     prompts = []
-    with open(input_path, 'r') as f:
+    with open(path) as f:
         for line in f:
-            line = line.strip()
-            if not line:
-                continue
+            data = json.loads(line)
+            p = data.get("text") or data.get("prompt")
+            if p:
+                prompts.append(p)
             if max_prompts and len(prompts) >= max_prompts:
                 break
-            data = json.loads(line)
-            prompt = data.get('text') or data.get('prompt')
-            if prompt:
-                prompts.append(prompt)
-    
-    logger.info(f"Loaded {len(prompts)} prompts from {input_path}")
     return prompts
 
 
-def resolve_output_path(output_path: str) -> str:
-    """Resolve output path placeholders using the current job environment."""
-    job_id = os.environ.get("LSB_JOBID")
-    if job_id:
-        output_path = output_path.replace("%J", job_id).replace("{job_id}", job_id)
-    return output_path
+def save_results(results, path):
+    job_id = os.environ.get("LSB_JOBID", "")
+    path = path.replace("%J", job_id).replace("{job_id}", job_id)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "w") as f:
+        for r in results:
+            f.write(json.dumps(r) + "\n")
+
+    logger.info(f"Saved results to {path}")
 
 
-def save_results(results: List[Dict[str, Any]], output_path: str):
-    """Save results to JSONL file."""
-    resolved_output_path = resolve_output_path(output_path)
-    output_file = Path(resolved_output_path)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(resolved_output_path, 'w') as f:
-        for result in results:
-            f.write(json.dumps(result) + '\n')
-    
-    logger.info(f"Saved {len(results)} results to {resolved_output_path}")
+# --------------------------------------------
+# Worker creation (FIXED AUTO LOGIC)
+# --------------------------------------------
+def create_workers(config, num_gpus_available):
+    model = config["model"]
+    exec_cfg = config["execution"]
+    lsf_cfg = config["lsf"]
 
+    device = exec_cfg.get("device", "gpu")
+    cpu_only = device == "cpu"
+    cpus_per_worker = exec_cfg.get("cpus_per_worker", 1)
 
-def create_workers(
-    config: Dict[str, Any],
-    num_gpus_available: int,
-) -> List[ray.ObjectRef]:
-    """
-    Create vLLM worker actors based on available resources.
-    
-    Args:
-        config: Configuration dictionary
-        num_gpus_available: Number of GPUs available in the cluster
-        
-    Returns:
-        List of worker actor references
-    """
-    model_config = config['model']
-    exec_config = config['execution']
-    
-    tensor_parallel_size = model_config['tensor_parallel_size']
-    num_workers = exec_config['num_workers']
-    cpu_only = exec_config.get('cpu_only', False)
-    
-    # Determine number of workers
-    if num_workers == "auto":
-        if cpu_only:
-            # For CPU, use 4 workers by default
-            num_workers = 4
-        else:
-            # For GPU, one worker per tensor_parallel_size GPUs
-            if tensor_parallel_size == "auto":
-                tensor_parallel_size = max(1, num_gpus_available)
-                num_workers = 1
-            else:
-                num_workers = max(1, num_gpus_available // tensor_parallel_size)
-    
+    tensor_parallel_size = model["tensor_parallel_size"]
     if tensor_parallel_size == "auto":
         tensor_parallel_size = 1
-    
-    logger.info(f"Creating {num_workers} workers with tensor_parallel_size={tensor_parallel_size}")
-    logger.info(f"CPU-only mode: {cpu_only}")
-    
+
+    # ✅ Correct "auto" logic
+    if exec_cfg["num_workers"] == "auto":
+        num_workers = lsf_cfg["num_workers"]
+    else:
+        num_workers = exec_cfg["num_workers"]
+
+    # ✅ Validation
+    if not cpu_only:
+        total_required_gpus = num_workers * tensor_parallel_size
+        if total_required_gpus > num_gpus_available:
+            raise ValueError(
+                f"Not enough GPUs: required={total_required_gpus}, available={num_gpus_available}"
+            )
+
+        if num_gpus_available % tensor_parallel_size != 0:
+            raise ValueError(
+                f"GPU count {num_gpus_available} not divisible by tensor_parallel_size={tensor_parallel_size}"
+            )
+
+    logger.info(f"Creating {num_workers} workers (tp={tensor_parallel_size})")
+
     workers = []
     for i in range(num_workers):
-        if cpu_only:
-            # CPU-only worker
-            worker = VLLMWorker.remote(
-                model_name=model_config['name'],
-                tensor_parallel_size=1,
-                max_model_len=model_config['max_model_len'],
-                max_num_seqs=model_config['max_num_seqs'],
-                cpu_only=True,
-            )
-        else:
-            # GPU worker
-            worker = VLLMWorker.options(
-                num_gpus=tensor_parallel_size
-            ).remote(
-                model_name=model_config['name'],
-                tensor_parallel_size=tensor_parallel_size,
-                max_model_len=model_config['max_model_len'],
-                max_num_seqs=model_config['max_num_seqs'],
-                gpu_memory_utilization=model_config['gpu_memory_utilization'],
-                quantization=model_config.get('quantization'),
-                cpu_only=False,
-                dtype=model_config.get('dtype', 'half'),
-            )
-        workers.append(worker)
-        logger.info(f"Created worker {i+1}/{num_workers}")
-    
+        w = VLLMWorker.options(
+            num_cpus=cpus_per_worker,
+            num_gpus=0 if cpu_only else tensor_parallel_size,
+        ).remote(
+            model_name=model["name"],
+            tensor_parallel_size=tensor_parallel_size,
+            max_model_len=model["max_model_len"],
+            max_num_seqs=model["max_num_seqs"],
+            gpu_memory_utilization=model["gpu_memory_utilization"],
+            quantization=model.get("quantization"),
+            dtype=model.get("dtype", "half"),
+            cpu_only=cpu_only,
+        )
+
+        workers.append(w)
+
     return workers
 
 
-def run_batch_inference(
-    workers: List[ray.ObjectRef],
-    prompts: List[str],
-    config: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    """
-    Run batch inference across multiple workers.
-    
-    Args:
-        workers: List of vLLM worker actors
-        prompts: List of prompts to process
-        config: Configuration dictionary
-        
-    Returns:
-        List of results
-    """
-    config['data']['output_path'] = resolve_output_path(config['data']['output_path'])
+# --------------------------------------------
+# Backpressure Scheduler (IMPORTANT)
+# --------------------------------------------
+def run_inference(workers, prompts, config):
+    batch_size = config["execution"]["batch_size"]
+    gen_cfg = config["generation"]
 
-    batch_size = config['execution']['batch_size']
-    gen_config = config['generation']
-    show_progress = config['logging'].get('show_progress', True)
-    
-    # Split prompts into batches
     batches = [
-        prompts[i:i + batch_size]
-        for i in range(0, len(prompts), batch_size)
+        prompts[i:i+batch_size] for i in range(0, len(prompts), batch_size)
     ]
-    
-    logger.info(f"Processing {len(prompts)} prompts in {len(batches)} batches")
-    logger.info(f"Batch size: {batch_size}, Workers: {len(workers)}")
-    
-    # Distribute batches across workers
-    futures = []
-    for i, batch in enumerate(batches):
-        worker = workers[i % len(workers)]
-        future = worker.generate.remote(
-            prompts=batch,
-            temperature=gen_config['temperature'],
-            top_p=gen_config['top_p'],
-            max_tokens=gen_config['max_tokens'],
-            n=gen_config['n'],
-            stop=gen_config.get('stop'),
-        )
-        futures.append(future)
-    
-    # Collect results with progress bar
+
+    logger.info(f"{len(prompts)} prompts → {len(batches)} batches")
+
+    params = dict(
+        temperature=gen_cfg["temperature"],
+        top_p=gen_cfg["top_p"],
+        max_tokens=gen_cfg["max_tokens"],
+        n=gen_cfg["n"],
+        stop=gen_cfg.get("stop"),
+    )
+
+    in_flight = []
     results = []
-    if show_progress:
-        for future in tqdm(futures, desc="Processing batches"):
-            batch_results = ray.get(future)
-            results.extend(batch_results)
-    else:
-        results = ray.get(futures)
-        # Flatten results
-        flattened = []
-        for batch_results in results:
-            flattened.extend(batch_results)
-        results = flattened
-    
+
+    max_in_flight = len(workers) * 2
+
+    for i, batch in enumerate(batches):
+        while len(in_flight) >= max_in_flight:
+            done, in_flight = ray.wait(in_flight, num_returns=1)
+            results.extend(ray.get(done[0]))
+
+        worker = workers[i % len(workers)]
+        fut = worker.generate.remote(batch, params)
+        in_flight.append(fut)
+
+    # drain
+    while in_flight:
+        done, in_flight = ray.wait(in_flight, num_returns=1)
+        results.extend(ray.get(done[0]))
+
     return results
 
 
+# --------------------------------------------
+# Main
+# --------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(
-        description="Batch inference with vLLM on Ray + LSF"
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="reference_architectures/batch_inference_ray_data/config.yaml",
-        help="Path to configuration file"
-    )
-    parser.add_argument(
-        "--cpu-only",
-        action="store_true",
-        help="Force CPU-only mode (overrides config)"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        help="Model name (overrides config)"
-    )
-    parser.add_argument(
-        "--input",
-        type=str,
-        help="Input file path (overrides config)"
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        help="Output file path (overrides config)"
-    )
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
     args = parser.parse_args()
-    
-    # Load configuration
+
     config = load_config(args.config)
-    
-    # Override config with command-line arguments
-    if args.cpu_only:
-        config['execution']['cpu_only'] = True
-        config['execution']['use_gpu'] = False
-    if args.model:
-        config['model']['name'] = args.model
-    if args.input:
-        config['data']['input_path'] = args.input
-    if args.output:
-        config['data']['output_path'] = args.output
-    
-    # Set logging level
-    log_level = config['logging'].get('level', 'INFO')
-    logging.getLogger().setLevel(getattr(logging, log_level))
-    
-    logger.info("=== Ray + vLLM Batch Inference ===")
-    logger.info(f"Model: {config['model']['name']}")
-    logger.info(f"Input: {config['data']['input_path']}")
-    logger.info(f"Output: {config['data']['output_path']}")
-    
-    # Connect to Ray cluster (should already be running via common/start_ray_cluster.sh)
-    try:
-        ray.init(address="auto")
-        logger.info("Connected to Ray cluster")
-    except Exception as e:
-        logger.error(f"Failed to connect to Ray cluster: {e}")
-        logger.info("Make sure Ray cluster is running via common/start_ray_cluster.sh")
-        sys.exit(1)
-    
-    # Get cluster resources
+
+    logger.info("Connecting to Ray...")
+    ray.init(address="auto")
+
     resources = ray.cluster_resources()
     num_gpus = int(resources.get("GPU", 0))
     num_cpus = int(resources.get("CPU", 0))
-    
-    logger.info(f"Cluster resources: {num_cpus} CPUs, {num_gpus} GPUs")
-    logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'not set')}")
-    
-    # Load prompts
+
+    logger.info(f"Cluster: CPUs={num_cpus}, GPUs={num_gpus}")
+
     prompts = load_prompts(
-        config['data']['input_path'],
-        config['data'].get('max_prompts')
+        config["data"]["input_path"],
+        config["data"].get("max_prompts")
     )
-    
+
     if not prompts:
-        logger.error("No prompts loaded. Check input file.")
-        sys.exit(1)
-    
-    # Create workers
-    start_time = time.time()
+        raise RuntimeError("No prompts loaded")
+
     workers = create_workers(config, num_gpus)
-    
-    # Wait for workers to initialize
-    logger.info("Waiting for workers to initialize...")
-    ray.get([worker.get_model_info.remote() for worker in workers])
-    logger.info("All workers initialized")
-    
-    # Run inference
-    logger.info("Starting batch inference...")
-    results = run_batch_inference(workers, prompts, config)
-    
-    # Save results
-    save_results(results, config['data']['output_path'])
-    
-    # Report statistics
-    elapsed_time = time.time() - start_time
-    throughput = len(prompts) / elapsed_time
-    
-    logger.info("=== Inference Complete ===")
-    logger.info(f"Processed: {len(prompts)} prompts")
-    logger.info(f"Time: {elapsed_time:.2f} seconds")
-    logger.info(f"Throughput: {throughput:.2f} prompts/second")
-    
-    # Shutdown
+
+    logger.info("Initializing workers...")
+    ray.get([w.generate.remote(["warmup"], dict(max_tokens=1)) for w in workers])
+
+    start = time.time()
+
+    results = run_inference(workers, prompts, config)
+
+    elapsed = time.time() - start
+
+    save_results(results, config["data"]["output_path"])
+
+    logger.info(f"Done. {len(prompts)} prompts in {elapsed:.2f}s")
+    logger.info(f"Throughput: {len(prompts)/elapsed:.2f} prompts/sec")
+
     ray.shutdown()
-    logger.info("Ray shutdown complete")
 
 
 if __name__ == "__main__":
     main()
-
-# Made with Bob

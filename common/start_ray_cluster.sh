@@ -1,261 +1,133 @@
 #!/bin/bash
-#Run Ray 2.x on LSF.
-#
-# Architecture:
-#   - One Ray process (head or worker) per host allocated by LSF
-#   - Each process uses the number of CPU cores allocated to that host
-#   - Core counts determined from LSB_DJOB_HOSTFILE (one line per core)
-#   - GPUs auto-detected via CUDA_VISIBLE_DEVICES set by LSF
-#   - All processes launched with blaunch for proper LSF tracking
-#
-#Examples:
-# CPU-only:
-#   bsub -n 8 -o output.%J ./common/start_ray_cluster.sh -n ray_cpu -c "python reference_architectures/batch_inference_ray_data/workload_actors.py --config reference_architectures/batch_inference_ray_data/config.yaml --cpu-only --model gpt2" -m 20000000000
-#
-# GPU with exclusive access:
-#   bsub -n 4 -gpu "num=1/task:j_exclusive=yes" -o output.%J ./common/start_ray_cluster.sh -n ray_gpu -c "python reference_architectures/batch_inference_ray_data/workload_actors.py --config reference_architectures/batch_inference_ray_data/config.yaml" -m 20000000000
-#
-# Optional LSF parameters:
-#   -q queue_name          # Specify queue
-#   -M 100GB               # Memory limit
-#   -W 2:00                # Wall time limit
-#   -R "rusage[mem=10GB]"  # Memory reservation
-echo "=== Ray 2.x on LSF Cluster Setup ==="
-echo "LSB_MCPU_HOSTS=$LSB_MCPU_HOSTS"
-echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
-echo ""
-echo "---- LSB_DJOB_HOSTFILE=$LSB_DJOB_HOSTFILE"
-cat $LSB_DJOB_HOSTFILE
-echo "---- End of LSB_DJOB_HOSTFILE"
-echo ""
+set -euo pipefail
 
-# Use user and job-specific temporary folder to avoid conflicts
-# when same user runs multiple Ray clusters
+echo "=== Ray Cluster Bootstrap (LSF) ==="
+
+# --------------------------------------------
+# Environment + temp dir
+# --------------------------------------------
 export RAY_TMPDIR="/tmp/ray-$USER-$LSB_JOBID"
+mkdir -p "$RAY_TMPDIR"
 echo "RAY_TMPDIR=$RAY_TMPDIR"
-mkdir -p $RAY_TMPDIR
 
-#bias to selection of higher range ports
-function getfreeport()
-{
-    CHECK="do while"
-    while [[ ! -z $CHECK ]]; do
-        port=$(( ( RANDOM % 40000 )  + 20000 ))
-        CHECK=$(netstat -a | grep $port)
-    done
-    echo $port
+echo ""
+echo "LSB_DJOB_HOSTFILE=$LSB_DJOB_HOSTFILE"
+cat "$LSB_DJOB_HOSTFILE"
+echo ""
+
+# --------------------------------------------
+# Build host list
+# --------------------------------------------
+mapfile -t hosts < <(sort "$LSB_DJOB_HOSTFILE" | uniq)
+echo "Hosts: ${hosts[*]}"
+
+# Count cores per host
+declare -A cores_per_host
+while read -r h; do
+  ((cores_per_host[$h]++))
+done < "$LSB_DJOB_HOSTFILE"
+
+for h in "${!cores_per_host[@]}"; do
+  echo "Host $h has ${cores_per_host[$h]} CPU slots"
+done
+
+# --------------------------------------------
+# Select head node
+# --------------------------------------------
+head_node="${hosts[0]}"
+
+# Resolve IPv4
+head_node_ip=$(getent hosts "$head_node" | awk '{print $1}' | grep -E '^[0-9]+\.' | head -1 || true)
+if [[ -z "$head_node_ip" ]]; then
+  head_node_ip=$(hostname -I | awk '{print $1}')
+fi
+
+echo "Head node: $head_node ($head_node_ip)"
+
+# --------------------------------------------
+# Ports
+# --------------------------------------------
+get_free_port() {
+  while true; do
+    port=$((RANDOM % 40000 + 20000))
+    ! ss -ltn | grep -q ":$port " && break
+  done
+  echo "$port"
 }
 
-while getopts ":c:n:m:" option;do
-    case "${option}" in
-    c) c=${OPTARG}
-        user_command=$c
-    ;;
-    n) n=${OPTARG}
-        conda_env=$n
-    ;;
-    m) m=${OPTARG}
-        object_store_mem=$m
-    ;;
-    *) echo "Did not supply the correct arguments"
-    ;;
-    esac
-    done
+port=$(get_free_port)
+dashboard_port=$(get_free_port)
 
+echo "Using ports: $port (dashboard: $dashboard_port)"
 
+# --------------------------------------------
+# Object store memory
+# --------------------------------------------
+object_store_mem="${RAY_OBJECT_STORE_MEMORY_BYTES:-4000000000}"
+echo "Object store memory: $object_store_mem"
 
-#use bash -i to activate conda env when the script is launched
-#or use the below syntax.
-if [ -z "$conda_env" ]
-then
-    echo "No conda env provided, is ray installed?"
-else
+# --------------------------------------------
+# Start head
+# --------------------------------------------
+num_cpu_head="${cores_per_host[$head_node]}"
 
-    eval "$(conda shell.bash hook)"
-    conda activate $conda_env
-fi
+echo "Starting Ray head..."
+blaunch -z "$head_node" \
+  ray start --head \
+    --port "$port" \
+    --dashboard-port "$dashboard_port" \
+    --num-cpus "$num_cpu_head" \
+    --object-store-memory "$object_store_mem" \
+    --dashboard-host 0.0.0.0 \
+    --node-ip-address "$head_node_ip" \
+  &
 
-hosts=()
-for host in `cat $LSB_DJOB_HOSTFILE | uniq`
-do
-        echo "Adding host: $host"
-        hosts+=($host)
+sleep 10
+
+# Wait for head
+echo "Waiting for Ray head..."
+until ray status --address "$head_node_ip:$port" >/dev/null 2>&1; do
+  sleep 2
 done
 
-echo "The host list is: ${hosts[@]}"
+echo "Head ready ✔"
 
-# Compute number of cores allocated to hosts from LSB_DJOB_HOSTFILE
-# Each line in the file represents one slot (CPU core) allocated to a host
-declare -A associative
-
-for host in `cat $LSB_DJOB_HOSTFILE | uniq`
-do
-    num_slots=`grep -c "^$host$" $LSB_DJOB_HOSTFILE`
-    associative[$host]=$num_slots
-done
-
-for host in ${!associative[@]}; do
-    echo "host=$host cores=${associative[$host]}"
-done
-
-#Assumption only one head node and more than one
-#workers will connect to head node
-
-head_node=${hosts[0]}
-
-# Resolve hostname to IPv4 address for Ray (filter out IPv6)
-# Use getent or host command to get IP, fallback to hostname if resolution fails
-head_node_ip=$(getent hosts $head_node | awk '{ print $1 }' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-if [ -z "$head_node_ip" ]; then
-    head_node_ip=$(host $head_node | awk '/has address/ { print $4 }' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-fi
-if [ -z "$head_node_ip" ]; then
-    echo "WARNING: Could not resolve $head_node to IPv4 address, using hostname"
-    head_node_ip=$head_node
-fi
-
-echo "Starting Ray head node on: ${hosts[0]} (IP: $head_node_ip)"
-export head_node
-export head_node_ip
-
-if [ -z $object_store_mem ]
-then
-    echo "Using default object store memory of 4GB"
-    object_store_mem=4000000000
-else
-    echo "Object store memory set to: $object_store_mem bytes"
-fi
-
-num_cpu_for_head=${associative[$head_node]}
-
-# Ray 2.x will automatically detect GPUs via CUDA_VISIBLE_DEVICES set by LSF
-# No need to manually specify --num-gpus
-echo "Ray will auto-detect GPUs from CUDA_VISIBLE_DEVICES"
-echo "Head node CPUs: $num_cpu_for_head"
-
-# Retry loop for starting Ray head node with port selection
-max_retries=5
-retry_count=0
-ray_started=false
-
-while [ "$ray_started" = false ] && [ $retry_count -lt $max_retries ]; do
-    retry_count=$((retry_count + 1))
-    
-    # Select new ports for each attempt
-    port=$(getfreeport)
-    dashboard_port=$(getfreeport)
-    
-    echo "Attempt $retry_count/$max_retries: Trying port $port (dashboard: $dashboard_port)"
-    
-    # Ray 2.x command with updated flags
-    # Use --node-ip-address to explicitly set the IP for multi-node clusters
-    command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --num-cpus $num_cpu_for_head --object-store-memory $object_store_mem --include-dashboard true --dashboard-host 0.0.0.0 --node-ip-address $head_node_ip"
-    
-    echo "Launching Ray head node..."
-    $command_launch &
-    
-    sleep 20
-    
-    # Check if Ray head is ready
-    command_check_up="ray status --address $head_node:$port"
-    check_attempts=0
-    max_check_attempts=3
-    
-    while [ $check_attempts -lt $max_check_attempts ]; do
-        if $command_check_up 2>/dev/null; then
-            echo "Ray head node is ready on port $port!"
-            ray_started=true
-            export port
-            break
-        fi
-        check_attempts=$((check_attempts + 1))
-        echo "Checking Ray status (attempt $check_attempts/$max_check_attempts)..."
-        sleep 3
-    done
-    
-    if [ "$ray_started" = false ]; then
-        echo "Failed to start Ray on port $port, will retry with new port..."
-        # Stop any partially started Ray processes
-        ray stop 2>/dev/null || true
-        sleep 5
-    fi
-done
-
-if [ "$ray_started" = false ]; then
-    echo "ERROR: Failed to start Ray head node after $max_retries attempts"
-    echo "Check for port conflicts or other issues in the output above."
-    exit 1
-fi
-
-
-
+# --------------------------------------------
+# Start workers
+# --------------------------------------------
 workers=("${hosts[@]:1}")
 
-echo "adding the workers to head node: ${workers[*]}"
-# Run ray on worker nodes and connect to head
-for host in "${workers[@]}"
-do
-    echo "Starting worker on: $host, connecting to head node: $head_node_ip"
+for host in "${workers[@]}"; do
+  echo "Starting worker on $host"
 
-    sleep 10
-    num_cpu=${associative[$host]}
-    
-    # Ray 2.x worker command - GPUs auto-detected via CUDA_VISIBLE_DEVICES
-    # Use blaunch -z with single hostname to launch one Ray worker process per host
-    # The worker will use all CPUs allocated to that host
-    # Use head_node_ip instead of hostname for consistent addressing
-    command_for_worker="blaunch -z $host ray start --address $head_node_ip:$port --num-cpus $num_cpu --object-store-memory $object_store_mem"
-    
-    echo "Worker command: $command_for_worker"
-    $command_for_worker &
-    
-    sleep 10
-    command_check_up_worker="blaunch -z $host ray status --address $head_node_ip:$port"
-    while ! $command_check_up_worker
-    do
-        echo "Waiting for worker $host to join cluster..."
-        sleep 3
-    done
-    echo "Worker $host successfully joined the cluster"
+  num_cpu="${cores_per_host[$host]}"
+
+  blaunch -z "$host" \
+    ray start \
+      --address "$head_node_ip:$port" \
+      --num-cpus "$num_cpu" \
+      --object-store-memory "$object_store_mem" \
+    &
+
+  # Wait for worker
+  until blaunch -z "$host" ray status --address "$head_node_ip:$port" >/dev/null 2>&1; do
+    echo "Waiting for worker $host..."
+    sleep 3
+  done
+
+  echo "Worker $host joined ✔"
 done
 
-# Display cluster status before running workload
+# --------------------------------------------
+# Export connection info
+# --------------------------------------------
+export RAY_ADDRESS="$head_node_ip:$port"
+echo "RAY_ADDRESS=$RAY_ADDRESS"
+
 echo ""
-echo "=== Ray Cluster Status ==="
-ray status --address $head_node_ip:$port
+echo "=== Ray Cluster Ready ==="
+ray status --address "$RAY_ADDRESS"
 echo ""
 
-# Run user workload with blaunch for LSF tracking
-echo "Running user workload: $user_command"
-echo ""
-blaunch -z $head_node $user_command
-
-exit_code=$?
-
-if [ $exit_code != 0 ]; then
-    echo ""
-    echo "ERROR: Workload failed with exit code: $exit_code"
-    echo "Shutting down Ray cluster..."
-    # Stop Ray on head node
-    ray stop --force
-    # Stop Ray on all worker nodes
-    for host in "${workers[@]}"
-    do
-        echo "Stopping Ray on worker: $host"
-        blaunch -z $host ray stop --force || true
-    done
-    exit $exit_code
-else
-    echo ""
-    echo "SUCCESS: Workload completed successfully"
-    echo "Shutting down Ray cluster..."
-    # Stop Ray on head node
-    ray stop --force
-    # Stop Ray on all worker nodes
-    for host in "${workers[@]}"
-    do
-        echo "Stopping Ray on worker: $host"
-        blaunch -z $host ray stop --force || true
-    done
-    echo "Job complete"
-fi
+# Return control (IMPORTANT: no workload here!)
+``

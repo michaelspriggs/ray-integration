@@ -30,10 +30,9 @@ The submission script reads `config.yaml` and submits the job with `bsub`. Users
 
 The submission flow is intentionally split by responsibility:
 
-- `submit_lsf.sh` reads LSF resource settings from `config.yaml` and submits the LSF job
+- `submit_lsf.sh` reads optional LSF resource settings from `config.yaml` and submits the LSF job
 - `run.sh` is the LSF job command
-- `run.sh` reads runtime settings from `config.yaml`, starts the Ray cluster, invokes the selected workload, and relies on `common/start_ray_cluster.sh` to tear the cluster down when the workload exits
-- `lsf.workload_script` selects the workload entrypoint
+- `run.sh` reads runtime settings from `config.yaml`, selects the workload from `execution.mode`, starts the Ray cluster, invokes the selected workload, and relies on `common/start_ray_cluster.sh` to tear the cluster down when the workload exits
 
 This separation keeps scheduler concerns in `submit_lsf.sh` and runtime orchestration in `run.sh`.
 
@@ -42,13 +41,29 @@ This separation keeps scheduler concerns in `submit_lsf.sh` and runtime orchestr
 Edit `config.yaml` to change:
 - model name
 - tensor parallel size
+- execution mode (`ray_data` or `actors`)
+- device selection (`gpu` or `cpu`)
 - worker count
+- CPUs per worker (enforced by Ray, not LSF)
+- Ray object store memory
 - input path
 - output path
 - dtype
-- LSF queue, node/task sizing, GPU count, walltime, memory, stdout log path, and workload script
+- LSF queue, worker count, GPUs per worker, memory per worker, single-host restriction, and stdout log path
 
-The `lsf:` section is the single place to adapt this reference architecture to a new cluster environment.
+Use the `execution:` section for workload behavior, the `ray:` section for Ray runtime settings, and the `lsf:` section for scheduler settings.
+
+The `lsf:` section is optional. If no LSF options are specified, `submit_lsf.sh` falls back to:
+
+```bash
+bsub "${SCRIPT_DIR}/run.sh"
+```
+
+When `lsf.restrict_to_single_host` is set to `true`, `submit_lsf.sh` adds:
+
+```bash
+-R "span[hosts=1]"
+```
 
 ## GPU compatibility
 
