@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -10,42 +9,31 @@ from typing import Dict, List, Optional, Any
 
 import ray
 import ray.data
-import yaml
+
+from common.utils import (
+    load_config,
+    resolve_output_path,
+    validate_config,
+    configure_logging,
+    ensure_dir,
+)
 
 
 # --------------------------------------------
 # Logging
 # --------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------
-# Global model per worker
+# Global model (per Ray worker process)
 # --------------------------------------------
 _model = None
 _sampling_params_class = None
 
 
 # --------------------------------------------
-# Utilities
-# --------------------------------------------
-def load_config(path: str):
-    return yaml.safe_load(open(path))
-
-
-def resolve_output_path(path: str) -> str:
-    job_id = os.environ.get("LSB_JOBID")
-    if job_id:
-        path = path.replace("%J", job_id).replace("{job_id}", job_id)
-    return path
-
-
-# --------------------------------------------
-# Inference class (Ray Data)
+# Inference Callable
 # --------------------------------------------
 class VLLMInference:
     def __init__(self, config: Dict[str, Any]):
@@ -59,15 +47,17 @@ class VLLMInference:
     def __call__(self, batch: Dict[str, List[str]]) -> Dict[str, List[Any]]:
         global _model, _sampling_params_class
 
+        # Lazy model initialization (once per worker)
         if _model is None:
             logger.info(f"[Worker {os.getpid()}] Loading vLLM model...")
+            logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}")
 
             from vllm import LLM, SamplingParams
             _sampling_params_class = SamplingParams
 
             tp = self.model_cfg.get("tensor_parallel_size", 1)
             if tp == "auto":
-                tp = 1  # ✅ deterministic for LSF model
+                tp = 1
 
             if self.cpu_only:
                 _model = LLM(
@@ -90,11 +80,13 @@ class VLLMInference:
 
             logger.info(f"[Worker {os.getpid()}] Model loaded")
 
+        # Extract prompts
         prompts = batch.get("text") or batch.get("prompt")
         if not prompts:
-            raise ValueError("Batch missing 'text' or 'prompt' field")
+            raise ValueError("Batch must contain 'text' or 'prompt' field")
 
-        sampling = _sampling_params_class(
+        # Sampling parameters
+        sampling_params = _sampling_params_class(
             temperature=self.gen_cfg["temperature"],
             top_p=self.gen_cfg["top_p"],
             max_tokens=self.gen_cfg["max_tokens"],
@@ -102,8 +94,10 @@ class VLLMInference:
             stop=self.gen_cfg.get("stop"),
         )
 
-        outputs = _model.generate(prompts, sampling)
+        # Run inference
+        outputs = _model.generate(prompts, sampling_params)
 
+        # Format output
         results = {
             "prompt": [],
             "generated_text": [],
@@ -124,31 +118,27 @@ class VLLMInference:
 # Main
 # --------------------------------------------
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Batch inference with vLLM using Ray Data"
+    )
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
 
+    # ✅ Load + validate config
     config = load_config(args.config)
+    validate_config(config)
 
-    config["data"]["output_path"] = resolve_output_path(
-        config["data"]["output_path"]
-    )
-
-    # --------------------------------------------
-    # Logging config
-    # --------------------------------------------
-    log_level = config["logging"].get("level", "INFO")
-    logging.getLogger().setLevel(getattr(logging, log_level))
+    # ✅ Logging
+    configure_logging(config["logging"].get("level", "INFO"))
 
     logger.info("=== Ray Data + vLLM Batch Inference ===")
+    logger.info(f"Model: {config['model']['name']}")
 
-    # --------------------------------------------
-    # Connect to Ray
-    # --------------------------------------------
+    # ✅ Connect to Ray
     try:
         ray.init(address="auto")
     except Exception as e:
-        logger.error(f"Ray init failed: {e}")
+        logger.error(f"Failed to connect to Ray cluster: {e}")
         sys.exit(1)
 
     resources = ray.cluster_resources()
@@ -159,10 +149,11 @@ def main():
     logger.info(f"Ray resources: {resources}")
 
     # --------------------------------------------
-    # Dataset
+    # Dataset loading
     # --------------------------------------------
     input_path = config["data"]["input_path"]
 
+    logger.info(f"Reading dataset: {input_path}")
     ds = ray.data.read_json(input_path)
 
     if config["data"].get("max_prompts"):
@@ -175,7 +166,7 @@ def main():
     logger.info(f"Loaded {count} prompts")
 
     # --------------------------------------------
-    # Resource model (FIXED)
+    # Resource model (LSF-aligned)
     # --------------------------------------------
     exec_cfg = config["execution"]
     model_cfg = config["model"]
@@ -188,7 +179,7 @@ def main():
     if tensor_parallel_size == "auto":
         tensor_parallel_size = 1
 
-    # ✅ KEY FIX: use LSF workers
+    # ✅ KEY: match LSF workers
     concurrency = lsf_cfg["num_workers"]
 
     if cpu_only:
@@ -213,7 +204,7 @@ def main():
     logger.info(f"GPUs per task: {num_gpus_per_task}")
 
     # --------------------------------------------
-    # Pipeline
+    # Run pipeline
     # --------------------------------------------
     batch_size = exec_cfg["batch_size"]
 
@@ -231,15 +222,15 @@ def main():
     )
 
     # --------------------------------------------
-    # Output
+    # Write output
     # --------------------------------------------
-    output_path = config["data"]["output_path"]
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    output_path = resolve_output_path(config["data"]["output_path"])
+    ensure_dir(output_path)
 
     logger.info(f"Writing results to {output_path}")
     ds.write_json(output_path)
 
-    logger.info("=== Done ===")
+    logger.info("=== Inference Complete ===")
     logger.info(f"Results saved to {output_path}")
 
     ray.shutdown()
@@ -247,4 +238,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

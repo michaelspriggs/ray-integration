@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -10,16 +9,21 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import ray
-import yaml
+from tqdm import tqdm
+
+from common.utils import (
+    load_config,
+    resolve_output_path,
+    load_jsonl_prompts,
+    validate_config,
+    configure_logging,
+    ensure_dir,
+)
 
 
 # --------------------------------------------
 # Logging
 # --------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
@@ -31,92 +35,76 @@ class VLLMWorker:
     def __init__(
         self,
         model_name: str,
-        tensor_parallel_size: int,
-        max_model_len: int,
-        max_num_seqs: int,
-        gpu_memory_utilization: float,
-        quantization: Optional[str],
-        dtype: str,
-        cpu_only: bool,
+        tensor_parallel_size: int = 1,
+        max_model_len: int = 2048,
+        max_num_seqs: int = 256,
+        gpu_memory_utilization: float = 0.9,
+        quantization: Optional[str] = None,
+        cpu_only: bool = False,
+        dtype: str = "half",
     ):
-        from vllm import LLM, SamplingParams
-
         self.model_name = model_name
         self.cpu_only = cpu_only
 
-        logger.info(f"[Worker] Starting model={model_name} tp={tensor_parallel_size}")
+        logger.info(f"Initializing worker model={model_name} tp={tensor_parallel_size}")
+        logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}")
 
-        if cpu_only:
-            self.llm = LLM(
-                model=model_name,
-                device="cpu",
-                max_model_len=max_model_len,
-                max_num_seqs=max_num_seqs,
-            )
-        else:
-            self.llm = LLM(
-                model=model_name,
-                tensor_parallel_size=tensor_parallel_size,
-                max_model_len=max_model_len,
-                max_num_seqs=max_num_seqs,
-                gpu_memory_utilization=gpu_memory_utilization,
-                quantization=quantization,
-                dtype=dtype,
-            )
+        try:
+            from vllm import LLM, SamplingParams
 
-        self.SamplingParams = SamplingParams
+            if cpu_only:
+                self.llm = LLM(
+                    model=model_name,
+                    device="cpu",
+                    tensor_parallel_size=1,
+                    max_model_len=max_model_len,
+                    max_num_seqs=max_num_seqs,
+                )
+            else:
+                self.llm = LLM(
+                    model=model_name,
+                    tensor_parallel_size=tensor_parallel_size,
+                    max_model_len=max_model_len,
+                    max_num_seqs=max_num_seqs,
+                    gpu_memory_utilization=gpu_memory_utilization,
+                    quantization=quantization,
+                    dtype=dtype,
+                )
+
+            self.SamplingParams = SamplingParams
+            logger.info("Worker initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize model: {e}")
+            raise
 
     def generate(self, prompts: List[str], params: Dict[str, Any]):
         sampling = self.SamplingParams(**params)
+
         outputs = self.llm.generate(prompts, sampling)
 
         results = []
-        for o in outputs:
+        for output in outputs:
             results.append({
-                "prompt": o.prompt,
-                "generated_text": [x.text for x in o.outputs],
-                "finish_reason": [x.finish_reason for x in o.outputs],
-                "num_tokens": [len(x.token_ids) for x in o.outputs],
+                "prompt": output.prompt,
+                "generated_text": [o.text for o in output.outputs],
+                "finish_reason": [o.finish_reason for o in output.outputs],
+                "num_tokens": [len(o.token_ids) for o in output.outputs],
             })
+
         return results
 
-
-# --------------------------------------------
-# Utilities
-# --------------------------------------------
-def load_config(path: str):
-    return yaml.safe_load(open(path))
-
-
-def load_prompts(path: str, max_prompts=None):
-    prompts = []
-    with open(path) as f:
-        for line in f:
-            data = json.loads(line)
-            p = data.get("text") or data.get("prompt")
-            if p:
-                prompts.append(p)
-            if max_prompts and len(prompts) >= max_prompts:
-                break
-    return prompts
-
-
-def save_results(results, path):
-    job_id = os.environ.get("LSB_JOBID", "")
-    path = path.replace("%J", job_id).replace("{job_id}", job_id)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-    with open(path, "w") as f:
-        for r in results:
-            f.write(json.dumps(r) + "\n")
-
-    logger.info(f"Saved results to {path}")
+    def get_model_info(self):
+        return {
+            "model_name": self.model_name,
+            "cpu_only": self.cpu_only,
+        }
 
 
 # --------------------------------------------
-# Worker creation (FIXED AUTO LOGIC)
+# Worker Creation (LSF-aligned)
 # --------------------------------------------
-def create_workers(config, num_gpus_available):
+def create_workers(config: Dict[str, Any], num_gpus_available: int):
     model = config["model"]
     exec_cfg = config["execution"]
     lsf_cfg = config["lsf"]
@@ -125,11 +113,11 @@ def create_workers(config, num_gpus_available):
     cpu_only = device == "cpu"
     cpus_per_worker = exec_cfg.get("cpus_per_worker", 1)
 
-    tensor_parallel_size = model["tensor_parallel_size"]
+    tensor_parallel_size = model.get("tensor_parallel_size", 1)
     if tensor_parallel_size == "auto":
         tensor_parallel_size = 1
 
-    # ✅ Correct "auto" logic
+    # ✅ Correct auto behavior: match LSF
     if exec_cfg["num_workers"] == "auto":
         num_workers = lsf_cfg["num_workers"]
     else:
@@ -143,16 +131,11 @@ def create_workers(config, num_gpus_available):
                 f"Not enough GPUs: required={total_required_gpus}, available={num_gpus_available}"
             )
 
-        if num_gpus_available % tensor_parallel_size != 0:
-            raise ValueError(
-                f"GPU count {num_gpus_available} not divisible by tensor_parallel_size={tensor_parallel_size}"
-            )
-
     logger.info(f"Creating {num_workers} workers (tp={tensor_parallel_size})")
 
     workers = []
     for i in range(num_workers):
-        w = VLLMWorker.options(
+        worker = VLLMWorker.options(
             num_cpus=cpus_per_worker,
             num_gpus=0 if cpu_only else tensor_parallel_size,
         ).remote(
@@ -162,24 +145,30 @@ def create_workers(config, num_gpus_available):
             max_num_seqs=model["max_num_seqs"],
             gpu_memory_utilization=model["gpu_memory_utilization"],
             quantization=model.get("quantization"),
-            dtype=model.get("dtype", "half"),
             cpu_only=cpu_only,
+            dtype=model.get("dtype", "half"),
         )
 
-        workers.append(w)
+        workers.append(worker)
+        logger.info(f"Created worker {i+1}/{num_workers}")
 
     return workers
 
 
 # --------------------------------------------
-# Backpressure Scheduler (IMPORTANT)
+# Backpressure Scheduler
 # --------------------------------------------
-def run_inference(workers, prompts, config):
+def run_batch_inference(
+    workers,
+    prompts,
+    config: Dict[str, Any],
+):
     batch_size = config["execution"]["batch_size"]
     gen_cfg = config["generation"]
 
     batches = [
-        prompts[i:i+batch_size] for i in range(0, len(prompts), batch_size)
+        prompts[i:i + batch_size]
+        for i in range(0, len(prompts), batch_size)
     ]
 
     logger.info(f"{len(prompts)} prompts → {len(batches)} batches")
@@ -192,9 +181,8 @@ def run_inference(workers, prompts, config):
         stop=gen_cfg.get("stop"),
     )
 
-    in_flight = []
     results = []
-
+    in_flight = []
     max_in_flight = len(workers) * 2
 
     for i, batch in enumerate(batches):
@@ -206,7 +194,6 @@ def run_inference(workers, prompts, config):
         fut = worker.generate.remote(batch, params)
         in_flight.append(fut)
 
-    # drain
     while in_flight:
         done, in_flight = ray.wait(in_flight, num_returns=1)
         results.extend(ray.get(done[0]))
@@ -215,46 +202,74 @@ def run_inference(workers, prompts, config):
 
 
 # --------------------------------------------
+# Save Results
+# --------------------------------------------
+def save_results(results, output_path: str):
+    with open(output_path, "w") as f:
+        for r in results:
+            f.write(json.dumps(r) + "\n")
+
+    logger.info(f"Saved {len(results)} results to {output_path}")
+
+
+# --------------------------------------------
 # Main
 # --------------------------------------------
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Batch inference with vLLM on Ray + LSF"
+    )
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
 
+    # ✅ Load + validate config
     config = load_config(args.config)
+    validate_config(config)
 
-    logger.info("Connecting to Ray...")
+    # ✅ Logging
+    configure_logging(config["logging"].get("level", "INFO"))
+
+    logger.info("=== Ray + vLLM Batch Inference ===")
+    logger.info(f"Model: {config['model']['name']}")
+
+    # ✅ Connect to Ray
     ray.init(address="auto")
 
     resources = ray.cluster_resources()
     num_gpus = int(resources.get("GPU", 0))
     num_cpus = int(resources.get("CPU", 0))
 
-    logger.info(f"Cluster: CPUs={num_cpus}, GPUs={num_gpus}")
+    logger.info(f"Cluster resources: {num_cpus} CPUs, {num_gpus} GPUs")
 
-    prompts = load_prompts(
+    # ✅ Load prompts
+    prompts = load_jsonl_prompts(
         config["data"]["input_path"],
-        config["data"].get("max_prompts")
+        config["data"].get("max_prompts"),
     )
 
     if not prompts:
         raise RuntimeError("No prompts loaded")
 
+    # ✅ Create workers
     workers = create_workers(config, num_gpus)
 
-    logger.info("Initializing workers...")
-    ray.get([w.generate.remote(["warmup"], dict(max_tokens=1)) for w in workers])
+    # Warmup
+    logger.info("Warming up workers...")
+    ray.get([w.get_model_info.remote() for w in workers])
 
-    start = time.time()
+    start_time = time.time()
 
-    results = run_inference(workers, prompts, config)
+    # ✅ Run inference
+    results = run_batch_inference(workers, prompts, config)
 
-    elapsed = time.time() - start
+    # ✅ Save output
+    output_path = resolve_output_path(config["data"]["output_path"])
+    ensure_dir(output_path)
+    save_results(results, output_path)
 
-    save_results(results, config["data"]["output_path"])
-
-    logger.info(f"Done. {len(prompts)} prompts in {elapsed:.2f}s")
+    # ✅ Stats
+    elapsed = time.time() - start_time
+    logger.info(f"Processed {len(prompts)} prompts in {elapsed:.2f}s")
     logger.info(f"Throughput: {len(prompts)/elapsed:.2f} prompts/sec")
 
     ray.shutdown()
