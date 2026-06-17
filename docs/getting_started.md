@@ -24,7 +24,7 @@ See `sample_conda_env/README.md` for more details.
 
 Start with:
 
-- `reference_architectures/batch_inference_ray_data/`
+- `reference_architectures/batch_inference/`
 
 This is the most complete reference architecture currently in the repository.
 
@@ -32,7 +32,7 @@ This is the most complete reference architecture currently in the repository.
 
 Inspect:
 
-- `reference_architectures/batch_inference_ray_data/config.yaml`
+- `reference_architectures/batch_inference/config.yaml`
 
 Adjust:
 - model name
@@ -46,7 +46,7 @@ Adjust:
 From the architecture directory or repository root:
 
 ```bash
-bsub < reference_architectures/batch_inference_ray_data/submit_lsf.sh
+bsub < reference_architectures/batch_inference/submit_lsf.sh
 ```
 
 ## 5. Inspect outputs
@@ -65,7 +65,7 @@ For a minimal sanity check, use:
 
 1. `docs/architecture_overview.md`
 2. `docs/lsf_integration.md`
-3. `reference_architectures/batch_inference_ray_data/README.md`
+3. `reference_architectures/batch_inference/README.md`
 4. `docs/troubleshooting.md`
 
 ## Notes

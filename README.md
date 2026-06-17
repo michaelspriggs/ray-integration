@@ -53,7 +53,7 @@ ray-on-lsf/
 - [`common/utils.py`](common/utils.py)
 
 ### Reference Architectures
-- [`reference_architectures/batch_inference_ray_data/`](reference_architectures/batch_inference_ray_data/)
+- [`reference_architectures/batch_inference/`](reference_architectures/batch_inference/)
 - [`reference_architectures/distributed_training/`](reference_architectures/distributed_training/)
 - [`reference_architectures/hyperparameter_tuning/`](reference_architectures/hyperparameter_tuning/)
 - [`reference_architectures/data_pipeline/`](reference_architectures/data_pipeline/)
@@ -91,7 +91,7 @@ Workload-specific logic lives in `reference_architectures/`.
 
 For a working end-to-end example, start with:
 
-- [`reference_architectures/batch_inference_ray_data/`](reference_architectures/batch_inference_ray_data/)
+- [`reference_architectures/batch_inference/`](reference_architectures/batch_inference/)
 
 Then follow:
 

@@ -53,7 +53,7 @@ New architectures can be added without restructuring the repository.
 
 ## Current Reference Architectures
 
-- `batch_inference_ray_data`
+- `batch_inference`
 - `distributed_training`
 - `hyperparameter_tuning`
 - `data_pipeline`
