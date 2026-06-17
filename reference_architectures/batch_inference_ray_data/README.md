@@ -1,85 +1,310 @@
-# Batch Inference with Ray on LSF
+# 🚀 Batch Inference with Ray + vLLM on LSF
 
-This reference architecture demonstrates distributed batch inference on LSF using Ray.
+This reference architecture demonstrates distributed batch inference for large language models using:
 
-## Included implementations
+- Ray 2.x for distributed execution  
+- vLLM for high-performance inference  
+- LSF (IBM Spectrum Computing) for cluster resource management  
 
-- `workload.py` — Ray Data-oriented implementation
-- `workload_actors.py` — actor-based vLLM implementation
+It supports multiple Ray execution models while maintaining a **consistent and explicit resource model**.
 
-## Files
+---
 
-- `config.yaml`
-- `submit_lsf.sh`
-- `workload.py`
-- `workload_actors.py`
-- `dataset/sample_prompts.jsonl`
+# 🧠 Architecture Overview
 
-## Recommended usage
+## Core Resource Model
 
-Activate the desired conda environment first, then submit:
+This system is built around a simple, deterministic model:
 
-```bash
-conda activate ray_env
-bash reference_architectures/batch_inference_ray_data/submit_lsf.sh
-```
+    1 LSF task = 1 Ray worker
 
-The submission script reads `config.yaml` and submits the job with `bsub`. Users should only need to edit `reference_architectures/batch_inference_ray_data/config.yaml` for their environment.
+Each worker is allocated:
 
-`run.sh` expects to be launched from an environment where `ray` and the workload dependencies are already available on `PATH`.
+    - gpus_per_worker GPUs
+    - memory_per_worker memory
+    - cpus_per_worker CPUs (enforced by Ray)
 
-The submission flow is intentionally split by responsibility:
+---
 
-- `submit_lsf.sh` reads optional LSF resource settings from `config.yaml` and submits the LSF job
-- `run.sh` is the LSF job command
-- `run.sh` reads runtime settings from `config.yaml`, selects the workload from `execution.mode`, starts the Ray cluster, invokes the selected workload, and relies on `common/start_ray_cluster.sh` to tear the cluster down when the workload exits
+## Resource Mapping
 
-This separation keeps scheduler concerns in `submit_lsf.sh` and runtime orchestration in `run.sh`.
+| Layer | Responsibility |
+|------|----------------|
+| LSF | Allocates CPUs, GPUs, and memory |
+| Ray | Schedules distributed execution |
+| Workload | Consumes resources |
 
-## Configuration
+---
 
-Edit `config.yaml` to change:
-- model name
-- tensor parallel size
-- execution mode (`ray_data` or `actors`)
-- device selection (`gpu` or `cpu`)
-- worker count
-- CPUs per worker (enforced by Ray, not LSF)
-- Ray object store memory
-- input path
-- output path
-- dtype
-- LSF queue, worker count, GPUs per worker, memory per worker, single-host restriction, and stdout log path
+## Total Resources
 
-Use the `execution:` section for workload behavior, the `ray:` section for Ray runtime settings, and the `lsf:` section for scheduler settings.
+    Total GPUs = num_workers × gpus_per_worker
 
-The `lsf:` section is optional. If no LSF options are specified, `submit_lsf.sh` falls back to:
+If using tensor parallelism:
 
-```bash
-bsub "${SCRIPT_DIR}/run.sh"
-```
+    GPUs per worker = tensor_parallel_size
 
-When `lsf.restrict_to_single_host` is set to `true`, `submit_lsf.sh` adds:
+Constraint:
 
-```bash
--R "span[hosts=1]"
-```
+    num_workers × tensor_parallel_size ≤ total GPUs
 
-## GPU compatibility
+---
 
-For Tesla T4-class GPUs, use:
+# ⚙️ Execution Flow
+
+    submit_lsf.sh
+        ↓
+    run.sh
+        ↓
+    start_ray_cluster.sh
+        ↓
+    Ray cluster starts
+        ↓
+    workload.py OR workload_actors.py runs
+        ↓
+    stop_ray_cluster.sh (automatic cleanup)
+
+---
+
+# 📦 Configuration
+
+All behavior is controlled via `config.yaml`.
+
+---
+
+## LSF (Resource Allocation)
 
 ```yaml
-dtype: "half"
+lsf:
+  num_workers: 8
+  gpus_per_worker: 1
+  memory_per_worker: "8GB"
+  restrict_to_single_host: false
 ```
 
-## Outputs
+---
 
-Results and LSF stdout are written to the configured paths in `config.yaml`, currently:
+## Execution (Workload Behavior)
 
-- inference results: `reference_architectures/batch_inference_ray_data/output/results.%J.jsonl`
-- LSF stdout: `reference_architectures/batch_inference_ray_data/output/output.%J`
+```yaml
+execution:
+  mode: "actors"        # or "ray_data"
+  num_workers: "auto"   # uses lsf.num_workers
+  cpus_per_worker: 4
+  device: "gpu"         # gpu | cpu
+  batch_size: 16
+```
 
-## Notes
+---
 
-This is currently the most complete reference architecture in the repository.
+## Model
+
+```yaml
+model:
+  name: "ibm-granite/granite-3b-code-base"
+  tensor_parallel_size: 1
+```
+
+---
+
+# 🧠 Choosing an Execution Model
+
+This architecture supports two execution models:
+
+- Ray Actors (`mode: actors`)
+- Ray Data (`mode: ray_data`)
+
+Both use the same resource model, but differ in how execution is handled.
+
+---
+
+## ✅ Ray Actors (`mode: actors`)
+
+Best for: Maximum control and performance tuning
+
+### Characteristics
+
+- Stateful workers (model loaded once per worker)
+- Explicit scheduling of work
+- Fine-grained control over execution
+- Manual batching and distribution
+
+### Use when
+
+- You want maximum GPU utilization
+- You need tight control over scheduling
+- You are optimizing performance
+- You need backpressure / custom logic
+
+### Trade-offs
+
+- More complex implementation
+- Manual scheduling required
+
+---
+
+## ✅ Ray Data (`mode: ray_data`)
+
+Best for: Simplicity and large datasets
+
+### Characteristics
+
+- Declarative pipeline using `map_batches`
+- Automatic batching and parallelism
+- Built-in fault tolerance
+- Handles dataset streaming
+
+### Use when
+
+- You have large datasets
+- You want minimal code
+- You prefer automatic scaling
+
+### Trade-offs
+
+- Less control over execution details
+- Harder to fine-tune performance
+
+---
+
+## ⚖️ Comparison
+
+| Feature | Actors | Ray Data |
+|--------|--------|----------|
+| Control | High | Low |
+| Simplicity | Medium | High |
+| Scheduling | Manual | Automatic |
+| Fault tolerance | Manual | Built-in |
+| Best for | Optimization | Large-scale data |
+
+---
+
+## ✅ Recommended Workflow
+
+- Start with Ray Data
+- Switch to Actors for performance tuning
+
+---
+
+## 🧠 Mental Model
+
+    Ray Actors = "I control execution"
+    Ray Data   = "Ray controls execution"
+
+---
+
+# 🚀 Running the Example
+
+## Submit to LSF
+
+```bash
+./submit_lsf.sh
+```
+
+---
+
+## Run locally (debug)
+
+```bash
+CONFIG_PATH=... ./run.sh
+```
+
+---
+
+## Dry run
+
+```bash
+DRY_RUN=true ./submit_lsf.sh
+```
+
+---
+
+# ⚙️ Scripts
+
+| Script | Role |
+|--------|------|
+| submit_lsf.sh | Submit job to LSF |
+| run.sh | Orchestrates execution |
+| start_ray_cluster.sh | Starts Ray cluster |
+| stop_ray_cluster.sh | Stops Ray cluster |
+| workload_actors.py | Actor-based execution |
+| workload.py | Ray Data execution |
+
+---
+
+# ⚙️ Key Design Principles
+
+## ✅ Explicit Resource Model
+
+- LSF controls GPUs and memory  
+- Ray controls CPU usage and scheduling  
+
+---
+
+## ✅ Separation of Concerns
+
+| Layer | Responsibility |
+|------|----------------|
+| LSF | Allocation |
+| Ray | Execution |
+| Workload | Computation |
+
+---
+
+## ✅ Deterministic Scaling
+
+- No hidden autoscaling
+- Scaling is fully controlled by LSF
+
+---
+
+# ⚠️ Common Pitfalls
+
+## GPU mismatch
+
+    num_workers × tensor_parallel_size > total GPUs
+
+→ causes startup failure
+
+---
+
+## Memory pressure
+
+- Ensure memory_per_worker is sufficient
+- Avoid very large batch sizes
+
+---
+
+## CPU oversubscription
+
+- CPUs are enforced by Ray, not LSF
+- Set cpus_per_worker appropriately
+
+---
+
+# 🧪 When to Use This Architecture
+
+Use this when:
+
+- Running large-scale batch inference
+- Using an LSF-managed cluster
+- You need explicit resource control
+
+---
+
+# ✅ Summary
+
+This architecture provides:
+
+- Clear, consistent resource modeling
+- Two execution paradigms (Actors and Ray Data)
+- Scalable, production-ready design
+- Clean separation of concerns
+
+---
+
+# 💬 Final Takeaway
+
+    LSF allocates resources
+    Ray executes the workload
+    The application consumes them
