@@ -86,11 +86,16 @@ for key in required:
     if key not in lsf:
         raise ValueError(f"Missing required field: lsf.{key}")
 
-num_workers = int(lsf["num_workers"])
-gpus_per_worker = int(lsf["gpus_per_worker"])
+# Handle "auto" for num_workers - will be resolved later
+num_workers_raw = lsf["num_workers"]
+if num_workers_raw == "auto":
+    num_workers = "auto"
+else:
+    num_workers = int(num_workers_raw)
+    if num_workers <= 0:
+        raise ValueError("lsf.num_workers must be > 0")
 
-if num_workers <= 0:
-    raise ValueError("lsf.num_workers must be > 0")
+gpus_per_worker = int(lsf["gpus_per_worker"])
 
 if gpus_per_worker <= 0:
     raise ValueError("lsf.gpus_per_worker must be > 0")
@@ -116,7 +121,13 @@ if "job_name" in lsf:
     emit("JOB_NAME", lsf["job_name"])
 
 if "output_log" in lsf:
-    emit("OUTPUT_LOG", lsf["output_log"])
+    # Resolve {repo_root} template and convert {job_id} to %J for LSF
+    import os
+    output_log = lsf["output_log"]
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(config_path)))
+    output_log = output_log.replace("{repo_root}", repo_root)
+    output_log = output_log.replace("{job_id}", "%J")
+    emit("OUTPUT_LOG", output_log)
 
 if "memory_per_worker" in lsf:
     emit("MEMORY_PER_WORKER", lsf["memory_per_worker"])
@@ -130,11 +141,16 @@ if [[ -z "${TOTAL_WORKERS:-}" ]]; then
   echo "Warning: Python config parsing failed, using grep/sed fallback" >&2
   
   # Extract values using grep and sed (|| true to prevent failures on missing fields)
-  TOTAL_WORKERS=$(grep -E '^\s*num_workers:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
+  TOTAL_WORKERS=$(grep -E '^\s*num_workers:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" | tr -d ' ' || true)
   GPUS_PER_WORKER=$(grep -E '^\s*gpus_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' || true)
   QUEUE=$(grep -E '^\s*queue:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   JOB_NAME=$(grep -E '^\s*job_name:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   OUTPUT_LOG=$(grep -E '^\s*output_log:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
+  # Resolve {repo_root} template and convert {job_id} to %J for LSF
+  if [[ -n "$OUTPUT_LOG" ]]; then
+    OUTPUT_LOG="${OUTPUT_LOG//\{repo_root\}/$REPO_ROOT}"
+    OUTPUT_LOG="${OUTPUT_LOG//\{job_id\}/%J}"
+  fi
   MEMORY_PER_WORKER=$(grep -E '^\s*memory_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   RESTRICT_TO_SINGLE_HOST=$(grep -E '^\s*restrict_to_single_host:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   INTERACTIVE=$(grep -E '^\s*interactive:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
@@ -142,6 +158,20 @@ if [[ -z "${TOTAL_WORKERS:-}" ]]; then
   # Convert boolean strings
   [[ "$RESTRICT_TO_SINGLE_HOST" == "true" ]] && RESTRICT_TO_SINGLE_HOST="true" || RESTRICT_TO_SINGLE_HOST="false"
   [[ "$INTERACTIVE" == "true" ]] && INTERACTIVE="true" || INTERACTIVE="false"
+fi
+
+# --------------------------------------------
+# Handle "auto" for num_workers
+# --------------------------------------------
+if [[ "${TOTAL_WORKERS:-}" == "auto" ]]; then
+  # When using grep/sed fallback, we need to get the actual value from execution.num_workers
+  # For now, we'll use lsf.num_workers as the default
+  ACTUAL_WORKERS=$(grep -E '^\s*num_workers:' "$CONFIG_PATH" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" | tr -d ' ' || echo "1")
+  if [[ "$ACTUAL_WORKERS" == "auto" ]]; then
+    # If lsf.num_workers is also auto, default to 1
+    ACTUAL_WORKERS="1"
+  fi
+  TOTAL_WORKERS="$ACTUAL_WORKERS"
 fi
 
 # --------------------------------------------
@@ -161,6 +191,13 @@ fi
 
 # Output log (skip if interactive mode)
 if [[ "${INTERACTIVE:-false}" != "true" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
+  # Ensure the log directory exists (LSF won't create nested directories)
+  # Note: %J will be replaced by LSF with the actual job ID, so we create parent dir only
+  LOG_DIR="$(dirname "${OUTPUT_LOG}")"
+  # Remove %J from path for directory creation
+  LOG_DIR_RESOLVED="${LOG_DIR//%J/placeholder}"
+  mkdir -p "${LOG_DIR_RESOLVED}" 2>/dev/null || true
+  
   bsub_args+=(-o "${OUTPUT_LOG}")
 fi
 
