@@ -111,6 +111,25 @@ model:
 
 ---
 
+## Data
+
+```yaml
+data:
+  input_path: "{repo_root}/reference_architectures/batch_inference/dataset/sample_prompts.jsonl"
+  output_dir: "{repo_root}/outputs/batch_inference/{job_id}"
+```
+
+The `output_dir` specifies where all job artifacts will be stored:
+- `config.yaml` - Copy of the configuration file
+- `lsf.log` - LSF job output log
+- `results.jsonl` - Inference results
+
+Template variables:
+- `{repo_root}` - Replaced with repository root path
+- `{job_id}` - Replaced with LSF job ID
+
+---
+
 # 🧠 Choosing an Execution Model
 
 This architecture supports two execution models:

@@ -138,11 +138,13 @@ if "queue" in lsf:
 if "job_name" in lsf:
     emit("JOB_NAME", lsf["job_name"])
 
-if "output_log" in lsf:
-    # Resolve {repo_root} template and convert {job_id} to %J for LSF
-    output_log = lsf["output_log"]
-    output_log = output_log.replace("{repo_root}", repo_root)
-    output_log = output_log.replace("{job_id}", "%J")
+# Get output_dir from data section for LSF log file
+data = cfg.get("data", {})
+if "output_dir" in data:
+    output_dir = data["output_dir"]
+    output_dir = output_dir.replace("{repo_root}", repo_root)
+    output_dir = output_dir.replace("{job_id}", "%J")
+    output_log = f"{output_dir}/lsf.log"
     emit("OUTPUT_LOG", output_log)
 
 if "memory_per_worker" in lsf:
@@ -162,12 +164,15 @@ if [[ -z "${TOTAL_WORKERS:-}" ]]; then
   GPUS_PER_WORKER=$(grep -E '^\s*gpus_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' || true)
   QUEUE=$(grep -E '^\s*queue:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   JOB_NAME=$(grep -E '^\s*job_name:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  OUTPUT_LOG=$(grep -E '^\s*output_log:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  # Resolve {repo_root} template and convert {job_id} to %J for LSF
-  if [[ -n "$OUTPUT_LOG" ]]; then
-    OUTPUT_LOG="${OUTPUT_LOG//\{repo_root\}/$REPO_ROOT}"
-    OUTPUT_LOG="${OUTPUT_LOG//\{job_id\}/%J}"
+  
+  # Get output_dir from data section for LSF log file
+  OUTPUT_DIR=$(grep -A 10 '^data:' "$CONFIG_PATH" 2>/dev/null | grep -E '^\s*output_dir:' | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
+  if [[ -n "$OUTPUT_DIR" ]]; then
+    OUTPUT_DIR="${OUTPUT_DIR//\{repo_root\}/$REPO_ROOT}"
+    OUTPUT_DIR="${OUTPUT_DIR//\{job_id\}/%J}"
+    OUTPUT_LOG="${OUTPUT_DIR}/lsf.log"
   fi
+  
   MEMORY_PER_WORKER=$(grep -E '^\s*memory_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   INTERACTIVE=$(grep -E '^\s*interactive:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   

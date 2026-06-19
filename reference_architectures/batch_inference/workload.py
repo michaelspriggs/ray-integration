@@ -227,17 +227,17 @@ def main():
     # --------------------------------------------
     # Write output
     # --------------------------------------------
-    output_path = resolve_path(config["data"]["output_path"])
-    ensure_dir(output_path)
-
-    # Copy config file to output directory
-    output_dir = Path(output_path).parent
+    output_dir = Path(resolve_path(config["data"]["output_dir"]))
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copy config file to output directory
     shutil.copy(args.config, output_dir / "config.yaml")
     logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
-
+    
+    # Write results
+    output_path = output_dir / "results.jsonl"
     logger.info(f"Writing results to {output_path}")
-    ds.write_json(output_path)
+    ds.write_json(str(output_path))
 
     logger.info("=== Inference Complete ===")
     logger.info(f"Results saved to {output_path}")

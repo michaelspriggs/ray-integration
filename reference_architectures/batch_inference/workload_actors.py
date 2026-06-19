@@ -279,16 +279,16 @@ def main():
     results = run_batch_inference(workers, prompts, config)
 
     # ✅ Save output
-    output_path = resolve_path(config["data"]["output_path"])
-    ensure_dir(output_path)
+    output_dir = Path(resolve_path(config["data"]["output_dir"]))
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Copy config file to output directory
-    output_dir = Path(output_path).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(args.config, output_dir / "config.yaml")
     logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
     
-    save_results(results, output_path)
+    # Save results
+    output_path = output_dir / "results.jsonl"
+    save_results(results, str(output_path))
 
     # ✅ Stats
     elapsed = time.time() - start_time

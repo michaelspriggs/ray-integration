@@ -7,7 +7,6 @@ lsf:
   gpus_per_worker: 1
   memory_per_worker: "8GB"
   interactive: true
-  output_log: "{repo_root}/outputs/batch_inference/{job_id}/lsf.log"
 
 execution:
   mode: "actors"
@@ -30,7 +29,7 @@ generation:
 
 data:
   input_path: "{repo_root}/reference_architectures/batch_inference/dataset/sample_prompts.jsonl"
-  output_path: "{repo_root}/outputs/batch_inference/{job_id}/results.jsonl"
+  output_dir: "{repo_root}/outputs/batch_inference/{job_id}"
   max_prompts: 20
 
 logging:
