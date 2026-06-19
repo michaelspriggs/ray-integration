@@ -213,32 +213,30 @@ cat > "${SUBMIT_SCRIPT}" <<'EOF'
 #!/bin/bash
 EOF
 
-# Add LSF directives
-if [[ "${INTERACTIVE:-false}" != "true" ]]; then
-  [[ -n "${JOB_NAME:-}" ]] && echo "#BSUB -J ${JOB_NAME}" >> "${SUBMIT_SCRIPT}"
-  [[ -n "${QUEUE:-}" ]] && echo "#BSUB -q ${QUEUE}" >> "${SUBMIT_SCRIPT}"
-  [[ -n "${TOTAL_SLOTS:-}" ]] && echo "#BSUB -n ${TOTAL_SLOTS}" >> "${SUBMIT_SCRIPT}"
-  
-  # Output log
-  if [[ -n "${OUTPUT_LOG:-}" ]]; then
-    echo "#BSUB -o ${OUTPUT_LOG}" >> "${SUBMIT_SCRIPT}"
-  fi
-  
-  # GPU allocation
-  if [[ -n "${GPUS_PER_WORKER:-}" ]] && [[ "${GPUS_PER_WORKER}" -gt 0 ]]; then
-    echo "#BSUB -gpu \"num=${GPUS_PER_WORKER}/host:j_exclusive=yes\"" >> "${SUBMIT_SCRIPT}"
-  fi
-  
-  # Resource requirements
-  resource_requirements=()
-  [[ -n "${MEMORY_PER_WORKER:-}" ]] && resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/host]")
-  [[ -n "${CPUS_PER_WORKER:-}" ]] && resource_requirements+=("span[ptile=${CPUS_PER_WORKER}]")
-  
-  if [[ ${#resource_requirements[@]} -gt 0 ]]; then
-    combined_requirements="$(printf "%s " "${resource_requirements[@]}")"
-    combined_requirements="${combined_requirements% }"
-    echo "#BSUB -R \"${combined_requirements}\"" >> "${SUBMIT_SCRIPT}"
-  fi
+# Add LSF directives (always add them to the script)
+[[ -n "${JOB_NAME:-}" ]] && echo "#BSUB -J ${JOB_NAME}" >> "${SUBMIT_SCRIPT}"
+[[ -n "${QUEUE:-}" ]] && echo "#BSUB -q ${QUEUE}" >> "${SUBMIT_SCRIPT}"
+[[ -n "${TOTAL_SLOTS:-}" ]] && echo "#BSUB -n ${TOTAL_SLOTS}" >> "${SUBMIT_SCRIPT}"
+
+# Output log (skip if interactive mode)
+if [[ "${INTERACTIVE:-false}" != "true" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
+  echo "#BSUB -o ${OUTPUT_LOG}" >> "${SUBMIT_SCRIPT}"
+fi
+
+# GPU allocation
+if [[ -n "${GPUS_PER_WORKER:-}" ]] && [[ "${GPUS_PER_WORKER}" -gt 0 ]]; then
+  echo "#BSUB -gpu \"num=${GPUS_PER_WORKER}/host:j_exclusive=yes\"" >> "${SUBMIT_SCRIPT}"
+fi
+
+# Resource requirements
+resource_requirements=()
+[[ -n "${MEMORY_PER_WORKER:-}" ]] && resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/host]")
+[[ -n "${CPUS_PER_WORKER:-}" ]] && resource_requirements+=("span[ptile=${CPUS_PER_WORKER}]")
+
+if [[ ${#resource_requirements[@]} -gt 0 ]]; then
+  combined_requirements="$(printf "%s " "${resource_requirements[@]}")"
+  combined_requirements="${combined_requirements% }"
+  echo "#BSUB -R \"${combined_requirements}\"" >> "${SUBMIT_SCRIPT}"
 fi
 
 # Add blank line after directives
