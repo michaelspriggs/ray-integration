@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -14,7 +15,7 @@ from tqdm import tqdm
 
 from common.utils import (
     load_config,
-    resolve_output_path,
+    resolve_path,
     load_jsonl_prompts,
     validate_config,
     configure_logging,
@@ -254,8 +255,9 @@ def main():
     logger.info(f"Cluster resources: {num_cpus} CPUs, {num_gpus} GPUs")
 
     # ✅ Load prompts
+    input_path = resolve_path(config["data"]["input_path"])
     prompts = load_jsonl_prompts(
-        config["data"]["input_path"],
+        input_path,
         config["data"].get("max_prompts"),
     )
 
@@ -275,8 +277,15 @@ def main():
     results = run_batch_inference(workers, prompts, config)
 
     # ✅ Save output
-    output_path = resolve_output_path(config["data"]["output_path"])
+    output_path = resolve_path(config["data"]["output_path"])
     ensure_dir(output_path)
+    
+    # Copy config file to output directory
+    output_dir = Path(output_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(args.config, output_dir / "config.yaml")
+    logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
+    
     save_results(results, output_path)
 
     # ✅ Stats

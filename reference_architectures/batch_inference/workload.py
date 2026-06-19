@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -12,7 +13,7 @@ import ray.data
 
 from common.utils import (
     load_config,
-    resolve_output_path,
+    resolve_path,
     validate_config,
     configure_logging,
     ensure_dir,
@@ -151,7 +152,7 @@ def main():
     # --------------------------------------------
     # Dataset loading
     # --------------------------------------------
-    input_path = config["data"]["input_path"]
+    input_path = resolve_path(config["data"]["input_path"])
 
     logger.info(f"Reading dataset: {input_path}")
     ds = ray.data.read_json(input_path)
@@ -224,8 +225,14 @@ def main():
     # --------------------------------------------
     # Write output
     # --------------------------------------------
-    output_path = resolve_output_path(config["data"]["output_path"])
+    output_path = resolve_path(config["data"]["output_path"])
     ensure_dir(output_path)
+
+    # Copy config file to output directory
+    output_dir = Path(output_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(args.config, output_dir / "config.yaml")
+    logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
 
     logger.info(f"Writing results to {output_path}")
     ds.write_json(output_path)

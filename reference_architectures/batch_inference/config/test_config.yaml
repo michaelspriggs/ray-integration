@@ -76,10 +76,12 @@ ray:
 
 data:
   # Input data path (JSONL format with "text" or "prompt" field)
-  input_path: "reference_architectures/batch_inference/dataset/sample_prompts.jsonl"
+  # {repo_root} will be replaced with the repository root path
+  input_path: "{repo_root}/reference_architectures/batch_inference/dataset/sample_prompts.jsonl"
   
-  # Output path for results. %J or {job_id} will be replaced with the LSF job ID.
-  output_path: "reference_architectures/batch_inference/output/results.%J.jsonl"
+  # Output path for results. {job_id} will be replaced with the LSF job ID.
+  # {repo_root} will be replaced with the repository root path
+  output_path: "{repo_root}/outputs/batch_inference/{job_id}/results.jsonl"
   
   # Maximum number of prompts to process (null for all)
   max_prompts: null
@@ -120,8 +122,9 @@ lsf:
   # Job name shown in LSF tools such as bjobs and bhist.
   job_name: "ray_batch"
 
-  # Standard output log path for the LSF job. %J expands to the LSF job ID.
-  output_log: "reference_architectures/batch_inference/output/output.%J"
+  # Standard output log path for the LSF job. {job_id} will be replaced with the LSF job ID.
+  # {repo_root} will be replaced with the repository root path
+  output_log: "{repo_root}/outputs/batch_inference/{job_id}/logs/output.log"
 
   # Total number of workers to request for this job.
   num_workers: 2

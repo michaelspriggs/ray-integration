@@ -37,10 +37,17 @@ def validate_config(cfg: Dict[str, Any]) -> None:
 # --------------------------------------------
 # Paths
 # --------------------------------------------
-def resolve_output_path(path: str) -> str:
-    job_id = os.environ.get("LSB_JOBID")
-    if job_id:
-        path = path.replace("%J", job_id).replace("{job_id}", job_id)
+def resolve_path(path: str) -> str:
+    """
+    Resolve templated paths using environment variables.
+    """
+    repo_root = os.environ.get("REPO_ROOT", "")
+    job_id = os.environ.get("LSB_JOBID", "local")
+
+    path = path.replace("{repo_root}", repo_root)
+    path = path.replace("{job_id}", job_id)
+    path = path.replace("%J", job_id)
+
     return path
 
 
