@@ -245,6 +245,12 @@ With a custom config file:
 ./submit_lsf.sh --config config/my_custom_config.yaml
 ```
 
+### How it works
+
+`submit_lsf.sh` generates an LSF submission script and submits it via `bsub < script`. After successful submission:
+- The submission script is saved to `{output_dir}/submit.sh`
+- All job artifacts (config, logs, results) are stored in `{output_dir}`
+
 ---
 
 ## Interactive Mode (for debugging)
@@ -279,11 +285,13 @@ You can run the workload directly using the common run script:
 
 ## Dry run
 
-Preview the bsub command without submitting:
+Preview the generated LSF submission script without submitting:
 
 ```bash
 ./submit_lsf.sh --config config/config.yaml --dry-run
 ```
+
+This displays the submission script that would be generated and submitted to LSF.
 
 ---
 

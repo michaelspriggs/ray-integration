@@ -205,87 +205,105 @@ fi
 TOTAL_SLOTS=$((TOTAL_WORKERS * CPUS_PER_WORKER))
 
 # --------------------------------------------
-# Build bsub command
+# Generate LSF submission script
 # --------------------------------------------
-bsub_args=()
+SUBMIT_SCRIPT="/tmp/ray_submit_${USER}_$$.sh"
 
-# Interactive mode
-if [[ "${INTERACTIVE:-false}" == "true" ]]; then
-  bsub_args+=(-Is)
-fi
+cat > "${SUBMIT_SCRIPT}" <<'EOF'
+#!/bin/bash
+EOF
 
-# Basic options
-[[ -n "${JOB_NAME:-}" ]] && bsub_args+=(-J "${JOB_NAME}")
-[[ -n "${QUEUE:-}" ]] && bsub_args+=(-q "${QUEUE}")
-
-# Number of slots (total CPUs needed)
-if [[ -n "${TOTAL_SLOTS:-}" ]]; then
-  bsub_args+=(-n "${TOTAL_SLOTS}")
-fi
-
-# Output log (skip if interactive mode)
-if [[ "${INTERACTIVE:-false}" != "true" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
-  # Ensure the parent directory exists (LSF won't create nested directories)
-  # Note: %J will be replaced by LSF with the actual job ID
-  # We need to create the directory structure up to but not including the %J part
-  LOG_DIR="$(dirname "${OUTPUT_LOG}")"
+# Add LSF directives
+if [[ "${INTERACTIVE:-false}" != "true" ]]; then
+  [[ -n "${JOB_NAME:-}" ]] && echo "#BSUB -J ${JOB_NAME}" >> "${SUBMIT_SCRIPT}"
+  [[ -n "${QUEUE:-}" ]] && echo "#BSUB -q ${QUEUE}" >> "${SUBMIT_SCRIPT}"
+  [[ -n "${TOTAL_SLOTS:-}" ]] && echo "#BSUB -n ${TOTAL_SLOTS}" >> "${SUBMIT_SCRIPT}"
   
-  # If the path contains %J, create parent directory up to that point
-  if [[ "$LOG_DIR" == *"%J"* ]]; then
-    # Extract the part before %J
-    PARENT_DIR="${LOG_DIR%%/%J*}"
-    mkdir -p "${PARENT_DIR}" 2>/dev/null || true
-  else
-    # No %J in path, create the full directory
-    mkdir -p "${LOG_DIR}" 2>/dev/null || true
+  # Output log
+  if [[ -n "${OUTPUT_LOG:-}" ]]; then
+    echo "#BSUB -o ${OUTPUT_LOG}" >> "${SUBMIT_SCRIPT}"
   fi
   
-  bsub_args+=(-o "${OUTPUT_LOG}")
+  # GPU allocation
+  if [[ -n "${GPUS_PER_WORKER:-}" ]] && [[ "${GPUS_PER_WORKER}" -gt 0 ]]; then
+    echo "#BSUB -gpu \"num=${GPUS_PER_WORKER}/host:j_exclusive=yes\"" >> "${SUBMIT_SCRIPT}"
+  fi
+  
+  # Resource requirements
+  resource_requirements=()
+  [[ -n "${MEMORY_PER_WORKER:-}" ]] && resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/host]")
+  [[ -n "${CPUS_PER_WORKER:-}" ]] && resource_requirements+=("span[ptile=${CPUS_PER_WORKER}]")
+  
+  if [[ ${#resource_requirements[@]} -gt 0 ]]; then
+    combined_requirements="$(printf "%s " "${resource_requirements[@]}")"
+    combined_requirements="${combined_requirements% }"
+    echo "#BSUB -R \"${combined_requirements}\"" >> "${SUBMIT_SCRIPT}"
+  fi
 fi
 
-# GPU allocation - always use per-host allocation
-# Skip -gpu option if gpus_per_worker is 0 (LSF doesn't allow -gpu num=0)
-if [[ -n "${GPUS_PER_WORKER:-}" ]] && [[ "${GPUS_PER_WORKER}" -gt 0 ]]; then
-  bsub_args+=(-gpu "num=${GPUS_PER_WORKER}/host:j_exclusive=yes")
-fi
+# Add blank line after directives
+echo "" >> "${SUBMIT_SCRIPT}"
 
-# Resource requirements
-resource_requirements=()
+# Add the execution command
+cat >> "${SUBMIT_SCRIPT}" <<EOF
+# Execute workload
+${REPO_ROOT}/common/run.sh --config '${CONFIG_PATH}' --workload-dir '${SCRIPT_DIR}'
+EOF
 
-# Memory reservation - always per host (1 worker per host with ptile)
-if [[ -n "${MEMORY_PER_WORKER:-}" ]]; then
-  resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/host]")
-fi
-
-# Span configuration - always use ptile to distribute workers across hosts
-if [[ -n "${CPUS_PER_WORKER:-}" ]]; then
-  resource_requirements+=("span[ptile=${CPUS_PER_WORKER}]")
-fi
-
-# Combine -R into single argument
-if [[ ${#resource_requirements[@]} -gt 0 ]]; then
-  combined_requirements="$(printf "%s " "${resource_requirements[@]}")"
-  combined_requirements="${combined_requirements% }"
-  bsub_args+=(-R "${combined_requirements}")
-fi
+chmod +x "${SUBMIT_SCRIPT}"
 
 # --------------------------------------------
-# Debug / Dry-run
+# Handle dry-run or submission
 # --------------------------------------------
-# Build the command to execute
-EXEC_CMD="${REPO_ROOT}/common/run.sh --config '${CONFIG_PATH}' --workload-dir '${SCRIPT_DIR}'"
-
-echo "Submitting job with command:"
-printf ' %q' bsub "${bsub_args[@]}" "${EXEC_CMD}"
-echo
-
 if [[ "${DRY_RUN:-false}" == "true" ]]; then
-  echo "Dry-run enabled. Not submitting."
+  echo "=== Dry-run mode: Generated submission script ==="
+  echo ""
+  cat "${SUBMIT_SCRIPT}"
+  echo ""
+  echo "=== End of submission script ==="
+  rm -f "${SUBMIT_SCRIPT}"
   exit 0
 fi
 
 # --------------------------------------------
 # Submit job
 # --------------------------------------------
-bsub "${bsub_args[@]}" "${EXEC_CMD}"
+echo "Submitting job from script: ${SUBMIT_SCRIPT}"
+echo ""
+
+if [[ "${INTERACTIVE:-false}" == "true" ]]; then
+  # Interactive mode: use bsub -Is with the script
+  bsub -Is < "${SUBMIT_SCRIPT}"
+  JOB_RESULT=$?
+else
+  # Batch mode: submit and capture job ID
+  SUBMIT_OUTPUT=$(bsub < "${SUBMIT_SCRIPT}" 2>&1)
+  JOB_RESULT=$?
+  echo "${SUBMIT_OUTPUT}"
+  
+  # Extract job ID from output (format: "Job <12345> is submitted to queue <normal>.")
+  if [[ $JOB_RESULT -eq 0 ]]; then
+    JOB_ID=$(echo "${SUBMIT_OUTPUT}" | grep -oP 'Job <\K[0-9]+(?=>)')
+    
+    if [[ -n "${JOB_ID}" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
+      # Resolve output directory (replace %J with actual job ID)
+      ACTUAL_OUTPUT_DIR="${OUTPUT_LOG//%J/${JOB_ID}}"
+      ACTUAL_OUTPUT_DIR="$(dirname "${ACTUAL_OUTPUT_DIR}")"
+      
+      # Create output directory and move submission script
+      mkdir -p "${ACTUAL_OUTPUT_DIR}"
+      mv "${SUBMIT_SCRIPT}" "${ACTUAL_OUTPUT_DIR}/submit.sh"
+      echo ""
+      echo "Submission script saved to: ${ACTUAL_OUTPUT_DIR}/submit.sh"
+    else
+      # Cleanup if we couldn't determine job ID or output dir
+      rm -f "${SUBMIT_SCRIPT}"
+    fi
+  else
+    # Cleanup on failure
+    rm -f "${SUBMIT_SCRIPT}"
+  fi
+fi
+
+exit $JOB_RESULT
 
