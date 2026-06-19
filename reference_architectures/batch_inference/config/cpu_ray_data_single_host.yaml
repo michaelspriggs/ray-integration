@@ -15,15 +15,15 @@ execution:
   batch_size: 8
 
 model:
-  name: "ibm-granite/granite-3b-code-base"
+  name: "ibm-granite/granite-3b-instruct"
   tensor_parallel_size: 1
-  max_model_len: 1024
-  max_num_seqs: 64
+  max_model_len: 2048
+  max_num_seqs: 256
 
 generation:
-  temperature: 0.7
+  temperature: 0.2
   top_p: 0.9
-  max_tokens: 128
+  max_tokens: 200
   n: 1
 
 data:
