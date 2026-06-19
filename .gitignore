@@ -1,8 +1,14 @@
 # LSF output files
 output.*
 
-# Batch inference results
+# Job outputs
+outputs/
+
+# Legacy output directories
 batch_inference_results/
+reference_architectures/batch_inference/output/
+reference_architectures/distributed_training/output/
+reference_architectures/hyperparameter_tuning/output/
 
 # Python cache
 __pycache__/
