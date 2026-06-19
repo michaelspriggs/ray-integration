@@ -263,7 +263,7 @@ You can run the workload directly using the common run script:
 Preview the bsub command without submitting:
 
 ```bash
-DRY_RUN=true ./submit_lsf.sh --config config/config.yaml
+./submit_lsf.sh --config config/config.yaml --dry-run
 ```
 
 ---

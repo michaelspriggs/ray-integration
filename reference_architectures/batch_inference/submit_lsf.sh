@@ -9,6 +9,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # Parse command-line arguments
 # --------------------------------------------
 CONFIG_PATH=""
+DRY_RUN="${DRY_RUN:-false}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -16,17 +17,23 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="$2"
       shift 2
       ;;
+    --dry-run)
+      DRY_RUN="true"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 --config CONFIG_FILE"
+      echo "Usage: $0 --config CONFIG_FILE [OPTIONS]"
       echo ""
       echo "Required arguments:"
       echo "  --config CONFIG_FILE    Path to configuration file"
       echo ""
       echo "Optional arguments:"
+      echo "  --dry-run              Preview the bsub command without submitting"
       echo "  -h, --help             Show this help message"
       echo ""
-      echo "Example:"
+      echo "Examples:"
       echo "  $0 --config config/config.yaml"
+      echo "  $0 --config config/config.yaml --dry-run"
       exit 0
       ;;
     *)
