@@ -83,18 +83,20 @@ fi
 # Parse config via Python (robust)
 # --------------------------------------------
 eval "$(
-python3 - "$CONFIG_PATH" "$WORKLOAD_DIR" <<'PY'
-import sys, yaml, shlex
+python3 - "$CONFIG_PATH" "$WORKLOAD_DIR" "$REPO_ROOT" <<'PY'
+import sys, yaml, shlex, os
 from pathlib import Path
 
 config_path = Path(sys.argv[1]).resolve()
 workload_dir = Path(sys.argv[2]).resolve()
+repo_root = sys.argv[3]
 
 with open(config_path) as f:
     cfg = yaml.safe_load(f)
 
 execution = cfg.get("execution", {})
 ray_cfg = cfg.get("ray", {})
+data_cfg = cfg.get("data", {})
 
 def require(section, key):
     if key not in section or section[key] in (None, ""):
@@ -122,8 +124,28 @@ def emit(name, value):
 emit("WORKLOAD_PATH", workload_path)
 emit("CONFIG_PATH_VALUE", config_path)
 emit("RAY_OBJ_STORE", ray_cfg.get("object_store_memory_bytes", ""))
+
+# Get output_dir and resolve templates
+output_dir = data_cfg.get("output_dir", "")
+if output_dir:
+    # Resolve {repo_root} template
+    output_dir = output_dir.replace("{repo_root}", repo_root)
+    # Resolve {job_id} template
+    job_id = os.environ.get("LSB_JOBID", "local")
+    output_dir = output_dir.replace("{job_id}", job_id)
+    emit("OUTPUT_DIR", output_dir)
 PY
 )"
+
+# --------------------------------------------
+# Create output directory
+# --------------------------------------------
+if [[ -n "${OUTPUT_DIR:-}" ]]; then
+  echo "=== Creating output directory ==="
+  echo "Output directory: ${OUTPUT_DIR}"
+  mkdir -p "${OUTPUT_DIR}"
+  echo ""
+fi
 
 # --------------------------------------------
 # Pre-flight checks
@@ -139,6 +161,9 @@ echo "Python: $(command -v python)"
 echo "Ray:    $(command -v ray)"
 echo "Config: ${CONFIG_PATH_VALUE}"
 echo "Mode:   $(basename "$WORKLOAD_PATH")"
+if [[ -n "${OUTPUT_DIR:-}" ]]; then
+  echo "Output: ${OUTPUT_DIR}"
+fi
 echo ""
 
 # --------------------------------------------
