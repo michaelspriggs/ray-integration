@@ -196,6 +196,10 @@ echo ""
 # --------------------------------------------
 # Build workload command safely
 # --------------------------------------------
+# Export REPO_ROOT and LSB_JOBID so they can be used by resolve_path() in utils.py
+export REPO_ROOT="${REPO_ROOT}"
+export LSB_JOBID="${LSB_JOBID:-local}"
+
 # Add repo root to PYTHONPATH so common module can be imported
 export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 

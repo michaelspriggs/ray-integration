@@ -62,7 +62,7 @@ cd "${REPO_ROOT}"
 # Parse config.yaml using Python + PyYAML
 # --------------------------------------------
 eval "$(
-python3 - "$CONFIG_PATH" <<'PY' 2>/dev/null || echo "# Python validation skipped"
+python3 - "$CONFIG_PATH" "$REPO_ROOT" <<'PY' 2>/dev/null || echo "# Python validation skipped"
 import sys
 try:
     import yaml
@@ -72,6 +72,7 @@ except ImportError:
 import shlex
 
 config_path = sys.argv[1]
+repo_root = sys.argv[2]
 
 with open(config_path) as f:
     cfg = yaml.safe_load(f)
@@ -81,7 +82,7 @@ lsf = cfg.get("lsf", {})
 # ------------------------
 # Validation
 # ------------------------
-required = ["num_workers", "gpus_per_worker"]
+required = ["num_workers", "cpus_per_worker", "gpus_per_worker"]
 for key in required:
     if key not in lsf:
         raise ValueError(f"Missing required field: lsf.{key}")
@@ -95,10 +96,19 @@ else:
     if num_workers <= 0:
         raise ValueError("lsf.num_workers must be > 0")
 
-gpus_per_worker = int(lsf["gpus_per_worker"])
+cpus_per_worker = int(lsf["cpus_per_worker"])
+if cpus_per_worker <= 0:
+    raise ValueError("lsf.cpus_per_worker must be > 0")
 
-if gpus_per_worker <= 0:
-    raise ValueError("lsf.gpus_per_worker must be > 0")
+gpus_per_worker = int(lsf["gpus_per_worker"])
+if gpus_per_worker < 0:
+    raise ValueError("lsf.gpus_per_worker must be >= 0")
+
+# Calculate total slots needed
+if num_workers != "auto":
+    total_slots = num_workers * cpus_per_worker
+else:
+    total_slots = "auto"
 
 # ------------------------
 # Helpers
@@ -110,8 +120,9 @@ def emit(name, value):
 # Emit environment
 # ------------------------
 emit("TOTAL_WORKERS", num_workers)
+emit("CPUS_PER_WORKER", cpus_per_worker)
 emit("GPUS_PER_WORKER", gpus_per_worker)
-emit("RESTRICT_TO_SINGLE_HOST", str(lsf.get("restrict_to_single_host", False)).lower())
+emit("TOTAL_SLOTS", total_slots)
 emit("INTERACTIVE", str(lsf.get("interactive", False)).lower())
 
 if "queue" in lsf:
@@ -122,9 +133,7 @@ if "job_name" in lsf:
 
 if "output_log" in lsf:
     # Resolve {repo_root} template and convert {job_id} to %J for LSF
-    import os
     output_log = lsf["output_log"]
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(config_path)))
     output_log = output_log.replace("{repo_root}", repo_root)
     output_log = output_log.replace("{job_id}", "%J")
     emit("OUTPUT_LOG", output_log)
@@ -142,6 +151,7 @@ if [[ -z "${TOTAL_WORKERS:-}" ]]; then
   
   # Extract values using grep and sed (|| true to prevent failures on missing fields)
   TOTAL_WORKERS=$(grep -E '^\s*num_workers:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" | tr -d ' ' || true)
+  CPUS_PER_WORKER=$(grep -E '^\s*cpus_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' || true)
   GPUS_PER_WORKER=$(grep -E '^\s*gpus_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' || true)
   QUEUE=$(grep -E '^\s*queue:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   JOB_NAME=$(grep -E '^\s*job_name:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
@@ -152,27 +162,35 @@ if [[ -z "${TOTAL_WORKERS:-}" ]]; then
     OUTPUT_LOG="${OUTPUT_LOG//\{job_id\}/%J}"
   fi
   MEMORY_PER_WORKER=$(grep -E '^\s*memory_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  RESTRICT_TO_SINGLE_HOST=$(grep -E '^\s*restrict_to_single_host:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   INTERACTIVE=$(grep -E '^\s*interactive:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
   
+  # Calculate total slots
+  if [[ "$TOTAL_WORKERS" != "auto" ]] && [[ -n "$CPUS_PER_WORKER" ]]; then
+    TOTAL_SLOTS=$((TOTAL_WORKERS * CPUS_PER_WORKER))
+  else
+    TOTAL_SLOTS="auto"
+  fi
+  
   # Convert boolean strings
-  [[ "$RESTRICT_TO_SINGLE_HOST" == "true" ]] && RESTRICT_TO_SINGLE_HOST="true" || RESTRICT_TO_SINGLE_HOST="false"
   [[ "$INTERACTIVE" == "true" ]] && INTERACTIVE="true" || INTERACTIVE="false"
 fi
 
 # --------------------------------------------
-# Handle "auto" for num_workers
+# Handle defaults and "auto" for num_workers
 # --------------------------------------------
-if [[ "${TOTAL_WORKERS:-}" == "auto" ]]; then
-  # When using grep/sed fallback, we need to get the actual value from execution.num_workers
-  # For now, we'll use lsf.num_workers as the default
-  ACTUAL_WORKERS=$(grep -E '^\s*num_workers:' "$CONFIG_PATH" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" | tr -d ' ' || echo "1")
-  if [[ "$ACTUAL_WORKERS" == "auto" ]]; then
-    # If lsf.num_workers is also auto, default to 1
-    ACTUAL_WORKERS="1"
-  fi
-  TOTAL_WORKERS="$ACTUAL_WORKERS"
+# Set defaults if not set
+TOTAL_WORKERS="${TOTAL_WORKERS:-1}"
+CPUS_PER_WORKER="${CPUS_PER_WORKER:-1}"
+
+# Handle "auto" for num_workers
+if [[ "${TOTAL_WORKERS}" == "auto" ]]; then
+  # When execution.num_workers is "auto", use lsf.num_workers
+  # This should already be set from the Python parsing, but fallback to 1
+  TOTAL_WORKERS="1"
 fi
+
+# Calculate total slots
+TOTAL_SLOTS=$((TOTAL_WORKERS * CPUS_PER_WORKER))
 
 # --------------------------------------------
 # Build bsub command
@@ -187,34 +205,49 @@ fi
 # Basic options
 [[ -n "${JOB_NAME:-}" ]] && bsub_args+=(-J "${JOB_NAME}")
 [[ -n "${QUEUE:-}" ]] && bsub_args+=(-q "${QUEUE}")
-[[ -n "${TOTAL_WORKERS:-}" ]] && bsub_args+=(-n "${TOTAL_WORKERS}")
+
+# Number of slots (total CPUs needed)
+if [[ -n "${TOTAL_SLOTS:-}" ]]; then
+  bsub_args+=(-n "${TOTAL_SLOTS}")
+fi
 
 # Output log (skip if interactive mode)
 if [[ "${INTERACTIVE:-false}" != "true" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
-  # Ensure the log directory exists (LSF won't create nested directories)
-  # Note: %J will be replaced by LSF with the actual job ID, so we create parent dir only
+  # Ensure the parent directory exists (LSF won't create nested directories)
+  # Note: %J will be replaced by LSF with the actual job ID
+  # We need to create the directory structure up to but not including the %J part
   LOG_DIR="$(dirname "${OUTPUT_LOG}")"
-  # Remove %J from path for directory creation
-  LOG_DIR_RESOLVED="${LOG_DIR//%J/placeholder}"
-  mkdir -p "${LOG_DIR_RESOLVED}" 2>/dev/null || true
+  
+  # If the path contains %J, create parent directory up to that point
+  if [[ "$LOG_DIR" == *"%J"* ]]; then
+    # Extract the part before %J
+    PARENT_DIR="${LOG_DIR%%/%J*}"
+    mkdir -p "${PARENT_DIR}" 2>/dev/null || true
+  else
+    # No %J in path, create the full directory
+    mkdir -p "${LOG_DIR}" 2>/dev/null || true
+  fi
   
   bsub_args+=(-o "${OUTPUT_LOG}")
 fi
 
-# GPU
-if [[ -n "${GPUS_PER_WORKER:-}" ]]; then
-  bsub_args+=(-gpu "num=${GPUS_PER_WORKER}/task:j_exclusive=yes")
+# GPU allocation - always use per-host allocation
+# Skip -gpu option if gpus_per_worker is 0 (LSF doesn't allow -gpu num=0)
+if [[ -n "${GPUS_PER_WORKER:-}" ]] && [[ "${GPUS_PER_WORKER}" -gt 0 ]]; then
+  bsub_args+=(-gpu "num=${GPUS_PER_WORKER}/host:j_exclusive=yes")
 fi
 
 # Resource requirements
 resource_requirements=()
 
+# Memory reservation - always per host (1 worker per host with ptile)
 if [[ -n "${MEMORY_PER_WORKER:-}" ]]; then
-  resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/task]")
+  resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/host]")
 fi
 
-if [[ "${RESTRICT_TO_SINGLE_HOST:-false}" == "true" ]]; then
-  resource_requirements+=("span[hosts=1]")
+# Span configuration - always use ptile to distribute workers across hosts
+if [[ -n "${CPUS_PER_WORKER:-}" ]]; then
+  resource_requirements+=("span[ptile=${CPUS_PER_WORKER}]")
 fi
 
 # Combine -R into single argument

@@ -174,7 +174,9 @@ def main():
     lsf_cfg = config["lsf"]
 
     cpu_only = exec_cfg.get("device") == "cpu"
-    cpus_per_worker = exec_cfg.get("cpus_per_worker", 1)
+    
+    # Read cpus_per_worker from LSF section
+    cpus_per_worker = lsf_cfg.get("cpus_per_worker", 1)
 
     tensor_parallel_size = model_cfg.get("tensor_parallel_size", 1)
     if tensor_parallel_size == "auto":

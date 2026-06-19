@@ -124,7 +124,9 @@ def create_workers(config: Dict[str, Any], num_gpus_available: int):
 
     device = exec_cfg.get("device", "gpu")
     cpu_only = device == "cpu"
-    cpus_per_worker = exec_cfg.get("cpus_per_worker", 1)
+    
+    # Read cpus_per_worker from LSF section
+    cpus_per_worker = lsf_cfg.get("cpus_per_worker", 1)
 
     tensor_parallel_size = model.get("tensor_parallel_size", 1)
     if tensor_parallel_size == "auto":

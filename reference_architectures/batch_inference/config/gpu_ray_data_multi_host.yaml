@@ -1,23 +1,24 @@
 # Description:
-# Baseline GPU inference using Ray actors on a single host.
+# GPU batch inference using Ray Data across multiple hosts.
+# Each worker uses all GPUs on its host.
 
 lsf:
-  num_workers: 1
+  num_workers: 2
   cpus_per_worker: 4
-  gpus_per_worker: 1
+  gpus_per_worker: 2
   memory_per_worker: "8GB"
   interactive: false
   output_log: "{repo_root}/outputs/batch_inference/{job_id}/logs/lsf.log"
 
 execution:
-  mode: "actors"
+  mode: "ray_data"
   num_workers: "auto"
   device: "gpu"
-  batch_size: 16
+  batch_size: 32
 
 model:
   name: "ibm-granite/granite-3b-code-base"
-  tensor_parallel_size: 1
+  tensor_parallel_size: 2
   max_model_len: 2048
   max_num_seqs: 256
   gpu_memory_utilization: 0.9
