@@ -7,7 +7,7 @@ lsf:
   gpus_per_worker: 0
   memory_per_worker: "4GB"
   interactive: false
-  output_log: "{repo_root}/outputs/batch_inference/{job_id}/logs/lsf.log"
+  output_log: "{repo_root}/outputs/batch_inference/{job_id}/lsf.log"
 
 execution:
   mode: "ray_data"

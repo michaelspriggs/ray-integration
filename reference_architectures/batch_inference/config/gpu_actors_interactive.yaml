@@ -7,7 +7,7 @@ lsf:
   gpus_per_worker: 1
   memory_per_worker: "8GB"
   interactive: true
-  output_log: "{repo_root}/outputs/batch_inference/{job_id}/logs/lsf.log"
+  output_log: "{repo_root}/outputs/batch_inference/{job_id}/lsf.log"
 
 execution:
   mode: "actors"
