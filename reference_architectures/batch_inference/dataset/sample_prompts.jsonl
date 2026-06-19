@@ -1,21 +1,22 @@
-{"text": "Explain the concept of distributed computing in simple terms."}
-{"text": "What are the key benefits of using Ray for machine learning workloads?"}
-{"text": "Describe how GPU acceleration improves deep learning model training."}
-{"text": "What is batch inference and when should it be used?"}
-{"text": "Explain the difference between tensor parallelism and data parallelism."}
-{"text": "How does vLLM optimize large language model inference?"}
-{"text": "What are the advantages of using LSF for workload management?"}
-{"text": "Describe the role of a job scheduler in HPC environments."}
-{"text": "What is the purpose of CUDA_VISIBLE_DEVICES environment variable?"}
-{"text": "Explain how Ray actors differ from Ray tasks."}
-{"text": "What are the best practices for scaling machine learning workloads?"}
-{"text": "Describe the concept of fault tolerance in distributed systems."}
-{"text": "How does quantization reduce model size and improve inference speed?"}
-{"text": "What is the difference between synchronous and asynchronous execution?"}
-{"text": "Explain the concept of GPU memory utilization in deep learning."}
-{"text": "What are the key considerations when deploying LLMs in production?"}
-{"text": "Describe how batch processing differs from stream processing."}
-{"text": "What is the role of a head node in a Ray cluster?"}
-{"text": "Explain the benefits of using exclusive GPU access in multi-tenant environments."}
-{"text": "How does Ray Data simplify data preprocessing pipelines?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nExplain the concept of distributed computing in simple terms."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat are the key benefits of using Ray for machine learning workloads?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nDescribe how GPU acceleration improves deep learning model training."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat is batch inference and when should it be used?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nExplain the difference between tensor parallelism and data parallelism."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nHow does vLLM optimize large language model inference?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat are the advantages of using LSF for workload management?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nDescribe the role of a job scheduler in HPC environments."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat is the purpose of CUDA_VISIBLE_DEVICES environment variable?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nExplain how Ray actors differ from Ray tasks."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat are the best practices for scaling machine learning workloads?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nDescribe the concept of fault tolerance in distributed systems."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nHow does quantization reduce model size and improve inference speed?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat is the difference between synchronous and asynchronous execution?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nExplain the concept of GPU memory utilization in deep learning."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat are the key considerations when deploying LLMs in production?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nDescribe how batch processing differs from stream processing."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat is the role of a head node in a Ray cluster?"}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nExplain the benefits of using exclusive GPU access in multi-tenant environments."}
+{"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nHow does Ray Data simplify data preprocessing pipelines?"}
 
+// Made with Bob
