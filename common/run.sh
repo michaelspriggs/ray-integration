@@ -3,11 +3,72 @@
 set -euo pipefail
 
 # --------------------------------------------
+# Parse command-line arguments
+# --------------------------------------------
+show_usage() {
+  cat <<EOF
+Usage: $0 --config CONFIG_FILE --workload-dir WORKLOAD_DIR
+
+Required arguments:
+  --config CONFIG_FILE       Path to configuration YAML file
+  --workload-dir WORKLOAD_DIR  Directory containing workload scripts
+
+Optional arguments:
+  -h, --help                Show this help message
+
+Environment variables:
+  DEBUG=true                Enable debug mode (set -x)
+  DRY_RUN=true             Show commands without executing
+EOF
+  exit 0
+}
+
+CONFIG_PATH=""
+WORKLOAD_DIR=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      CONFIG_PATH="$2"
+      shift 2
+      ;;
+    --workload-dir)
+      WORKLOAD_DIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      show_usage
+      ;;
+    *)
+      echo "ERROR: Unknown argument: $1" >&2
+      echo "Run with --help for usage information." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Validate required arguments
+if [[ -z "$CONFIG_PATH" ]]; then
+  echo "ERROR: --config is required" >&2
+  echo "Run with --help for usage information." >&2
+  exit 1
+fi
+
+if [[ -z "$WORKLOAD_DIR" ]]; then
+  echo "ERROR: --workload-dir is required" >&2
+  echo "Run with --help for usage information." >&2
+  exit 1
+fi
+
+# Resolve paths
+CONFIG_PATH="$(cd "$(dirname "$CONFIG_PATH")" && pwd)/$(basename "$CONFIG_PATH")"
+WORKLOAD_DIR="$(cd "$WORKLOAD_DIR" && pwd)"
+
+# --------------------------------------------
 # Paths / config
 # --------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-CONFIG_PATH="${CONFIG_PATH:-${SCRIPT_DIR}/config.yaml}"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 
@@ -22,12 +83,12 @@ fi
 # Parse config via Python (robust)
 # --------------------------------------------
 eval "$(
-python3 - "$CONFIG_PATH" "$SCRIPT_DIR" <<'PY'
+python3 - "$CONFIG_PATH" "$WORKLOAD_DIR" <<'PY'
 import sys, yaml, shlex
 from pathlib import Path
 
 config_path = Path(sys.argv[1]).resolve()
-script_dir = Path(sys.argv[2]).resolve()
+workload_dir = Path(sys.argv[2]).resolve()
 
 with open(config_path) as f:
     cfg = yaml.safe_load(f)
@@ -51,7 +112,7 @@ if mode not in workloads:
     valid = ", ".join(sorted(workloads))
     raise SystemExit(f"Unsupported execution.mode '{mode}'. Expected: {valid}")
 
-workload_path = (script_dir / workloads[mode]).resolve()
+workload_path = (workload_dir / workloads[mode]).resolve()
 
 def emit(name, value):
     if value is None:
@@ -157,3 +218,5 @@ fi
 
 echo ""
 echo "=== Workload completed successfully ==="
+
+# Made with Bob

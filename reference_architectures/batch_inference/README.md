@@ -52,17 +52,17 @@ Constraint:
 
 # ⚙️ Execution Flow
 
-    submit_lsf.sh
+    submit_lsf.sh (batch_inference/)
         ↓
-    run.sh
+    common/run.sh
         ↓
-    start_ray_cluster.sh
+    common/start_ray_cluster.sh
         ↓
     Ray cluster starts
         ↓
     workload.py OR workload_actors.py runs
         ↓
-    stop_ray_cluster.sh (automatic cleanup)
+    common/stop_ray_cluster.sh (automatic cleanup)
 
 ---
 
@@ -214,16 +214,16 @@ This ensures PyYAML is available for config validation.
 
 ## Submit to LSF
 
-Basic submission (uses `config.yaml` in current directory):
+The `--config` option is **required**. Configuration files are stored in the `config/` directory:
 
 ```bash
-./submit_lsf.sh
+./submit_lsf.sh --config config/config.yaml
 ```
 
-With custom config file:
+With a custom config file:
 
 ```bash
-./submit_lsf.sh --config my_config.yaml
+./submit_lsf.sh --config config/my_custom_config.yaml
 ```
 
 ---
@@ -241,7 +241,7 @@ lsf:
 Then submit:
 
 ```bash
-./submit_lsf.sh --config debug_config.yaml
+./submit_lsf.sh --config config/debug_config.yaml
 ```
 
 The job will run interactively, showing output directly in your terminal.
@@ -250,8 +250,10 @@ The job will run interactively, showing output directly in your terminal.
 
 ## Run locally (debug)
 
+You can run the workload directly using the common run script:
+
 ```bash
-CONFIG_PATH=... ./run.sh
+../../common/run.sh --config config/config.yaml --workload-dir .
 ```
 
 ---
@@ -261,21 +263,23 @@ CONFIG_PATH=... ./run.sh
 Preview the bsub command without submitting:
 
 ```bash
-DRY_RUN=true ./submit_lsf.sh
+DRY_RUN=true ./submit_lsf.sh --config config/config.yaml
 ```
 
 ---
 
-# ⚙️ Scripts
+# ⚙️ Scripts and Files
 
-| Script | Role |
-|--------|------|
-| submit_lsf.sh | Submit job to LSF |
-| run.sh | Orchestrates execution |
-| start_ray_cluster.sh | Starts Ray cluster |
-| stop_ray_cluster.sh | Stops Ray cluster |
-| workload_actors.py | Actor-based execution |
-| workload.py | Ray Data execution |
+| Script/File | Location | Role |
+|-------------|----------|------|
+| submit_lsf.sh | batch_inference/ | Submit job to LSF |
+| config.yaml | batch_inference/config/ | Configuration file |
+| workload_actors.py | batch_inference/ | Actor-based execution |
+| workload.py | batch_inference/ | Ray Data execution |
+| run.sh | common/ | Orchestrates execution |
+| start_ray_cluster.sh | common/ | Starts Ray cluster |
+| stop_ray_cluster.sh | common/ | Stops Ray cluster |
+| utils.py | common/ | Shared utilities |
 
 ---
 

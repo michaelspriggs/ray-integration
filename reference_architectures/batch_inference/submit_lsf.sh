@@ -8,20 +8,25 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # --------------------------------------------
 # Parse command-line arguments
 # --------------------------------------------
-CONFIG_FILE=""
+CONFIG_PATH=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --config)
-      CONFIG_FILE="$2"
+      CONFIG_PATH="$2"
       shift 2
       ;;
     -h|--help)
-      echo "Usage: $0 [--config CONFIG_FILE]"
+      echo "Usage: $0 --config CONFIG_FILE"
       echo ""
-      echo "Options:"
-      echo "  --config CONFIG_FILE    Path to configuration file (default: config.yaml in current directory)"
+      echo "Required arguments:"
+      echo "  --config CONFIG_FILE    Path to configuration file"
+      echo ""
+      echo "Optional arguments:"
       echo "  -h, --help             Show this help message"
+      echo ""
+      echo "Example:"
+      echo "  $0 --config config/config.yaml"
       exit 0
       ;;
     *)
@@ -33,17 +38,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --------------------------------------------
-# Determine config path
+# Validate required arguments
 # --------------------------------------------
-if [[ -n "$CONFIG_FILE" ]]; then
-  # User specified --config option
-  CONFIG_PATH="$CONFIG_FILE"
-elif [[ -n "${CONFIG_PATH:-}" ]]; then
-  # CONFIG_PATH environment variable is set
-  CONFIG_PATH="$CONFIG_PATH"
-else
-  # Default: config.yaml in script directory
-  CONFIG_PATH="${SCRIPT_DIR}/config.yaml"
+if [[ -z "$CONFIG_PATH" ]]; then
+  echo "ERROR: --config is required" >&2
+  echo "Use --help for usage information" >&2
+  exit 1
 fi
 
 # Resolve to absolute path
@@ -191,7 +191,7 @@ fi
 # Debug / Dry-run
 # --------------------------------------------
 # Build the command to execute
-EXEC_CMD="export CONFIG_PATH='${CONFIG_PATH}'; ${SCRIPT_DIR}/run.sh"
+EXEC_CMD="${REPO_ROOT}/common/run.sh --config '${CONFIG_PATH}' --workload-dir '${SCRIPT_DIR}'"
 
 echo "Submitting job with command:"
 printf ' %q' bsub "${bsub_args[@]}" "${EXEC_CMD}"
