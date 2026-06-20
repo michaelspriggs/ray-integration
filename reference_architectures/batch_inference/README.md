@@ -220,6 +220,8 @@ Best for: Simplicity and large datasets
 
 ## Prerequisites
 
+### 1. Activate Conda Environment
+
 Activate the conda environment before submitting jobs:
 
 ```bash
@@ -228,6 +230,37 @@ conda activate ray_gpu  # or ray_cpu for CPU-only
 ```
 
 This ensures PyYAML is available for config validation.
+
+### 2. HuggingFace Authentication (if required)
+
+Some models require authentication to download from HuggingFace. If your model requires a token:
+
+1. **Create a HuggingFace token** at https://huggingface.co/settings/tokens
+
+2. **Set the token as an environment variable** before submitting jobs:
+
+```bash
+export HF_TOKEN="your_huggingface_token_here"
+```
+
+Or use the `HF_HOME` variable to specify a custom cache directory with credentials:
+
+```bash
+export HF_HOME="/path/to/huggingface/cache"
+```
+
+**Important:** The environment variable must be set in your submission environment (where you run `submit_lsf.sh`), not inside the LSF job. The token will be inherited by the LSF job environment.
+
+**Models that typically require authentication:**
+- `meta-llama/*` (Llama models)
+- `ibm-granite/*` (Granite models)
+- Private or gated models
+
+**Models that do NOT require authentication:**
+- `facebook/opt-*` (OPT models)
+- `tiiuae/falcon-*` (Falcon models)
+- `EleutherAI/*` (Pythia, GPT-Neo, etc.)
+- Most public models
 
 ---
 

@@ -1,6 +1,7 @@
 # Description:
 # Distributed GPU inference using Ray actors across hosts.
 # Each worker consumes all GPUs on its host.
+# Uses OPT-1.3B model (no authentication required, fits in single GPU).
 
 lsf:
   num_workers: 2
@@ -16,8 +17,8 @@ execution:
   batch_size: 32
 
 model:
-  name: "ibm-granite/granite-3b-instruct"
-  tensor_parallel_size: 2
+  name: "facebook/opt-1.3b"
+  tensor_parallel_size: 1
   max_model_len: 2048
   max_num_seqs: 256
   gpu_memory_utilization: 0.9

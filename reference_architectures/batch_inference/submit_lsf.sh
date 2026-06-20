@@ -270,9 +270,42 @@ echo "Submitting job from script: ${SUBMIT_SCRIPT}"
 echo ""
 
 if [[ "${INTERACTIVE:-false}" == "true" ]]; then
-  # Interactive mode: use bsub -Is with the script
-  bsub -Is < "${SUBMIT_SCRIPT}"
-  JOB_RESULT=$?
+  # Interactive mode: use bsub -Is with the script, capture output with tee
+  TEMP_OUTPUT="/tmp/bsub_output_${USER}_$$.txt"
+  bsub -Is < "${SUBMIT_SCRIPT}" 2>&1 | tee "${TEMP_OUTPUT}"
+  JOB_RESULT=${PIPESTATUS[0]}
+  
+  # Extract job ID from captured output
+  if [[ $JOB_RESULT -eq 0 ]] && [[ -f "${TEMP_OUTPUT}" ]]; then
+    JOB_ID=$(grep -oP 'Job <\K[0-9]+(?=>)' "${TEMP_OUTPUT}" | head -1)
+    
+    # For interactive jobs, use OUTPUT_DIR from config (not OUTPUT_LOG)
+    if [[ -n "${JOB_ID}" ]]; then
+      # Get output directory from config's data.output_dir
+      if [[ -n "${OUTPUT_LOG:-}" ]]; then
+        # If OUTPUT_LOG is set, derive directory from it
+        ACTUAL_OUTPUT_DIR="${OUTPUT_LOG//%J/${JOB_ID}}"
+        ACTUAL_OUTPUT_DIR="$(dirname "${ACTUAL_OUTPUT_DIR}")"
+      else
+        # For interactive mode without OUTPUT_LOG, construct from repo root
+        ACTUAL_OUTPUT_DIR="${REPO_ROOT}/outputs/batch_inference/${JOB_ID}"
+      fi
+      
+      # Create output directory and move submission script
+      mkdir -p "${ACTUAL_OUTPUT_DIR}"
+      mv "${SUBMIT_SCRIPT}" "${ACTUAL_OUTPUT_DIR}/submit.sh"
+      echo ""
+      echo "Submission script saved to: ${ACTUAL_OUTPUT_DIR}/submit.sh"
+    else
+      # Cleanup if we couldn't determine job ID
+      rm -f "${SUBMIT_SCRIPT}"
+    fi
+    rm -f "${TEMP_OUTPUT}"
+  else
+    # Cleanup on failure
+    rm -f "${SUBMIT_SCRIPT}"
+    rm -f "${TEMP_OUTPUT}"
+  fi
 else
   # Batch mode: submit and capture job ID
   SUBMIT_OUTPUT=$(bsub < "${SUBMIT_SCRIPT}" 2>&1)

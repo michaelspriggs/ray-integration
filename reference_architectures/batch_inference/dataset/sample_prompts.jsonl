@@ -18,5 +18,3 @@
 {"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nWhat is the role of a head node in a Ray cluster?"}
 {"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nExplain the benefits of using exclusive GPU access in multi-tenant environments."}
 {"prompt": "You are a helpful assistant. Answer clearly and concisely.\n\nHow does Ray Data simplify data preprocessing pipelines?"}
-
-// Made with Bob

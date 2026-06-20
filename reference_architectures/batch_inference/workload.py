@@ -50,25 +50,37 @@ class VLLMInference:
 
         # Lazy model initialization (once per worker)
         if _model is None:
-            logger.info(f"[Worker {os.getpid()}] Loading vLLM model...")
+            logger.info(f"[Worker {os.getpid()}] Loading model...")
             logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}")
-
-            from vllm import LLM, SamplingParams
-            _sampling_params_class = SamplingParams
-
-            tp = self.model_cfg.get("tensor_parallel_size", 1)
-            if tp == "auto":
-                tp = 1
+            logger.info(f"CPU-only mode: {self.cpu_only}")
 
             if self.cpu_only:
-                _model = LLM(
-                    model=self.model_cfg["name"],
-                    device="cpu",
-                    tensor_parallel_size=1,
-                    max_model_len=self.model_cfg["max_model_len"],
-                    max_num_seqs=self.model_cfg["max_num_seqs"],
-                )
+                # Use HuggingFace Transformers for CPU-only inference
+                logger.info(f"[Worker {os.getpid()}] Using HuggingFace Transformers for CPU inference")
+                from transformers import AutoTokenizer, AutoModelForCausalLM
+                import torch
+                
+                _model = {
+                    'tokenizer': AutoTokenizer.from_pretrained(self.model_cfg["name"]),
+                    'model': AutoModelForCausalLM.from_pretrained(
+                        self.model_cfg["name"],
+                        torch_dtype=torch.float32,
+                        device_map="cpu"
+                    ),
+                    'device': 'cpu'
+                }
+                _sampling_params_class = None  # Not used for Transformers
+                logger.info(f"[Worker {os.getpid()}] HuggingFace model loaded on CPU")
             else:
+                # Use vLLM for GPU inference
+                logger.info(f"[Worker {os.getpid()}] Using vLLM for GPU inference")
+                from vllm import LLM, SamplingParams
+                _sampling_params_class = SamplingParams
+
+                tp = self.model_cfg.get("tensor_parallel_size", 1)
+                if tp == "auto":
+                    tp = 1
+
                 _model = LLM(
                     model=self.model_cfg["name"],
                     tensor_parallel_size=tp,
@@ -78,39 +90,72 @@ class VLLMInference:
                     quantization=self.model_cfg.get("quantization"),
                     dtype=self.model_cfg.get("dtype", "half"),
                 )
-
-            logger.info(f"[Worker {os.getpid()}] Model loaded")
+                logger.info(f"[Worker {os.getpid()}] vLLM model loaded")
 
         # Extract prompts
         prompts = batch.get("text") or batch.get("prompt")
-        if not prompts:
+        if prompts is None or (hasattr(prompts, '__len__') and len(prompts) == 0):
             raise ValueError("Batch must contain 'text' or 'prompt' field")
 
-        # Sampling parameters
-        sampling_params = _sampling_params_class(
-            temperature=self.gen_cfg["temperature"],
-            top_p=self.gen_cfg["top_p"],
-            max_tokens=self.gen_cfg["max_tokens"],
-            n=self.gen_cfg["n"],
-            stop=self.gen_cfg.get("stop"),
-        )
+        # Run inference based on backend
+        if self.cpu_only:
+            # HuggingFace Transformers inference
+            import torch
+            tokenizer = _model['tokenizer']
+            model = _model['model']
+            
+            results = {
+                "prompt": [],
+                "generated_text": [],
+                "finish_reason": [],
+                "num_tokens": [],
+            }
+            
+            for prompt in prompts:
+                inputs = tokenizer(prompt, return_tensors="pt")
+                
+                with torch.no_grad():
+                    outputs = model.generate(
+                        **inputs,
+                        max_new_tokens=self.gen_cfg["max_tokens"],
+                        temperature=self.gen_cfg["temperature"],
+                        top_p=self.gen_cfg["top_p"],
+                        do_sample=True if self.gen_cfg["temperature"] > 0 else False,
+                        pad_token_id=tokenizer.eos_token_id,
+                    )
+                
+                generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                # Remove the prompt from the generated text
+                generated_text = generated_text[len(prompt):].strip()
+                
+                results["prompt"].append(prompt)
+                results["generated_text"].append([generated_text])
+                results["finish_reason"].append(["length"])  # Simplified
+                results["num_tokens"].append([len(outputs[0]) - len(inputs['input_ids'][0])])
+        else:
+            # vLLM inference
+            sampling_params = _sampling_params_class(
+                temperature=self.gen_cfg["temperature"],
+                top_p=self.gen_cfg["top_p"],
+                max_tokens=self.gen_cfg["max_tokens"],
+                n=self.gen_cfg["n"],
+                stop=self.gen_cfg.get("stop"),
+            )
 
-        # Run inference
-        outputs = _model.generate(prompts, sampling_params)
+            outputs = _model.generate(prompts, sampling_params)
 
-        # Format output
-        results = {
-            "prompt": [],
-            "generated_text": [],
-            "finish_reason": [],
-            "num_tokens": [],
-        }
+            results = {
+                "prompt": [],
+                "generated_text": [],
+                "finish_reason": [],
+                "num_tokens": [],
+            }
 
-        for out in outputs:
-            results["prompt"].append(out.prompt)
-            results["generated_text"].append([o.text for o in out.outputs])
-            results["finish_reason"].append([o.finish_reason for o in out.outputs])
-            results["num_tokens"].append([len(o.token_ids) for o in out.outputs])
+            for out in outputs:
+                results["prompt"].append(out.prompt)
+                results["generated_text"].append([o.text for o in out.outputs])
+                results["finish_reason"].append([o.finish_reason for o in out.outputs])
+                results["num_tokens"].append([len(o.token_ids) for o in out.outputs])
 
         return results
 
@@ -235,9 +280,25 @@ def main():
     logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
     
     # Write results
+    # Ray Data writes to a directory with partitioned files
+    temp_output_dir = output_dir / "results_temp"
+    logger.info(f"Writing results to temporary directory {temp_output_dir}")
+    ds.write_json(str(temp_output_dir))
+    
+    # Consolidate partitioned files into a single JSONL file
     output_path = output_dir / "results.jsonl"
-    logger.info(f"Writing results to {output_path}")
-    ds.write_json(str(output_path))
+    logger.info(f"Consolidating results into {output_path}")
+    
+    import glob
+    with open(output_path, 'w') as outfile:
+        for json_file in sorted(glob.glob(str(temp_output_dir / "*.json"))):
+            with open(json_file, 'r') as infile:
+                outfile.write(infile.read())
+    
+    # Clean up temporary directory
+    import shutil as shutil_module
+    shutil_module.rmtree(temp_output_dir)
+    logger.info(f"Removed temporary directory {temp_output_dir}")
 
     logger.info("=== Inference Complete ===")
     logger.info(f"Results saved to {output_path}")

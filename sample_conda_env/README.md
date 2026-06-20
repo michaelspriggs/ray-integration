@@ -1,68 +1,25 @@
-# Conda Environments for Ray on LSF
+# Conda Environment for Ray on LSF
 
-This directory contains conda environment files for different use cases.
+This directory contains a unified conda environment that works for both GPU and CPU workloads.
 
-## Available Environments
+## Unified Ray 2.x Environment
 
-### 1. Ray 2.x CPU (Development/Testing)
-
-**File:** `ray_2x_cpu.yml`
+**File:** `ray_2x.yml`
 
 **Use for:**
-- Development and testing
-- CPU-only workloads
-- Small models (e.g., gpt2)
-- Debugging
+- All Ray workloads (GPU and CPU)
+- Development and production
+- Batch inference, distributed training, hyperparameter tuning
+- Both vLLM (GPU) and Transformers (CPU) inference
 
-**Setup:**
+### Setup
 
-**Option A: Using the setup script (Recommended)**
-```bash
-cd sample_conda_env
-./setup_cpu_env.sh
-```
-
-**Option B: Manual setup**
 ```bash
 # Create environment
-conda env create -f sample_conda_env/ray_2x_cpu.yml
+conda env create -f sample_conda_env/ray_2x.yml
 
 # Activate environment
-conda activate ray_cpu
-
-# Install PyTorch CPU version (required step)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-
-# Verify installation
-python -c "import ray; print(f'Ray version: {ray.__version__}')"
-python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
-```
-
-**Key packages:**
-- Python 3.11
-- Ray 2.40.0
-- PyTorch 2.2.0 (CPU)
-- Transformers, Accelerate
-
-**Note:** vLLM is not included in the CPU environment as it has limited CPU support. For CPU testing, use transformers directly or small models.
-
-### 2. Ray 2.x GPU (Production)
-
-**File:** `ray_2x_gpu.yml`
-
-**Use for:**
-- Production workloads
-- GPU-accelerated inference
-- Large language models
-- vLLM inference
-
-**Setup:**
-```bash
-# Create environment
-conda env create -f sample_conda_env/ray_2x_gpu.yml
-
-# Activate environment
-conda activate ray_gpu
+conda activate ray
 
 # Verify installation
 python -c "import ray; print(f'Ray version: {ray.__version__}')"
@@ -70,149 +27,59 @@ python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 ```
 
-**Key packages:**
+### Key Features
+
+**Single environment for everything:**
 - Python 3.11
-- Ray 2.40.0
-- PyTorch 2.1.2 (GPU)
-- CUDA 11.8
-- vLLM 0.3.0
-- Flash Attention is installed transitively by vLLM when compatible
+- Ray 2.40.0 with Data support
+- PyTorch 2.1.2 (GPU-enabled, works on CPU too)
+- CUDA 11.8 toolkit
+- vLLM 0.3.0 (for GPU inference)
+- Transformers 4.38.0 (for CPU inference)
+- All necessary dependencies
 
-### 3. Ray 1.x (Legacy)
+**Automatic backend selection:**
+The workload code automatically detects whether to use:
+- **vLLM** for GPU nodes (high performance)
+- **Transformers** for CPU nodes (compatibility)
 
-**File:** `sample_ray_env.yml`
+This is controlled by the `device` parameter in your config file.
 
-**Use for:**
-- Backward compatibility
-- Existing Ray 1.x code
+### Key Packages
 
-**Setup:**
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Python | 3.11 | Runtime |
+| Ray | 2.40.0 | Distributed computing |
+| PyTorch | 2.1.2 | ML framework (GPU+CPU) |
+| CUDA | 11.8 | GPU acceleration |
+| vLLM | 0.3.0 | GPU inference engine |
+| Transformers | 4.38.0 | CPU/GPU inference |
+| Accelerate | 0.27.0 | Model optimization |
+
+## Usage Examples
+
+### GPU Workload
 ```bash
-conda env create -f sample_conda_env/sample_ray_env.yml
 conda activate ray
+cd reference_architectures/batch_inference
+./submit_lsf.sh --config config/gpu_actors_single_host.yaml
 ```
 
-**Note:** This environment is provided for backward compatibility only. New projects should use Ray 2.x environments.
-
-## Troubleshooting
-
-### Issue: PyTorch CPU installation fails
-
-**Error:**
-```
-ERROR: Could not find a version that satisfies the requirement torch==2.2.0+cpu
-```
-
-**Solution:**
-The `+cpu` suffix cannot be used directly in conda environment files. Install PyTorch CPU separately:
+### CPU Workload
 ```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+conda activate ray
+cd reference_architectures/batch_inference
+./submit_lsf.sh --config config/cpu_ray_data_single_host.yaml
 ```
 
-Or use the provided setup script:
-```bash
-cd sample_conda_env
-./setup_cpu_env.sh
-```
-
-### Issue: vLLM not available in CPU environment
-
-**Explanation:**
-vLLM has limited CPU support and is not included in the CPU environment. For CPU testing:
-
-1. Use transformers directly:
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model = AutoModelForCausalLM.from_pretrained("gpt2")
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
-```
-
-2. Or use small models that work well on CPU
-
-### Issue: GPU environment creation fails with dependency conflicts
-
-**Symptoms:**
-```bash
-ModuleNotFoundError: No module named 'torch'
-```
-
-or
-
-```bash
-ERROR: Cannot install ... because these package versions have conflicting dependencies
-```
-
-**Explanation:**
-`vllm==0.3.0` requires `torch==2.1.2`. If the environment pins newer PyTorch versions, pip resolution fails. Also, explicitly pinning `flash-attn` can trigger metadata generation before `torch` is installed.
-
-**Solution:**
-Use the repo's updated `ray_2x_gpu.yml`, which aligns PyTorch with `vllm==0.3.0` and lets vLLM manage compatible flash-attention dependencies transitively.
-
-### Issue: CUDA version mismatch
-
-**Error:**
-```
-RuntimeError: CUDA error: no kernel image is available for execution on the device
-```
-
-**Solution:**
-Your GPU may require a different CUDA version. Check your GPU's compute capability and install the appropriate CUDA toolkit:
-```bash
-# Check GPU compute capability
-nvidia-smi --query-gpu=compute_cap --format=csv
-
-# For newer GPUs (compute capability 8.0+), you may need CUDA 12.x
-# Modify ray_2x_gpu.yml to use cudatoolkit=12.1
-```
-
-### Issue: Out of memory during environment creation
-
-**Solution:**
-Clear conda cache and try again:
-```bash
-conda clean --all
-conda env create -f sample_conda_env/ray_2x_cpu.yml
-```
-
-## Environment Management
-
-### List environments
-```bash
-conda env list
-```
-
-### Activate environment
-```bash
-conda activate ray_cpu  # or ray_gpu
-```
-
-### Deactivate environment
-```bash
-conda deactivate
-```
-
-### Remove environment
-```bash
-conda env remove -n ray_cpu  # or ray_gpu
-```
-
-### Update environment
-```bash
-conda env update -f sample_conda_env/ray_2x_cpu.yml --prune
-```
-
-### Export environment
-```bash
-conda activate ray_cpu
-conda env export > my_environment.yml
-```
+The same environment works for both!
 
 ## Testing Your Environment
 
 ### Quick Test
 ```bash
-conda activate ray_cpu  # or ray_gpu
+conda activate ray
 
 # Test Ray
 python -c "import ray; ray.init(); print('Ray is working!'); ray.shutdown()"
@@ -220,7 +87,10 @@ python -c "import ray; ray.init(); print('Ray is working!'); ray.shutdown()"
 # Test PyTorch
 python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')"
 
-# Test Transformers
+# Test vLLM (GPU only)
+python -c "from vllm import LLM; print('vLLM is available!')"
+
+# Test Transformers (CPU/GPU)
 python -c "from transformers import AutoTokenizer; print('Transformers is working!')"
 ```
 
@@ -243,38 +113,127 @@ ray.shutdown()
 print("All tests passed!")
 ```
 
-## Comparison
+## Troubleshooting
 
-| Feature | CPU Environment | GPU Environment | Legacy (Ray 1.x) |
-|---------|----------------|-----------------|------------------|
-| Python | 3.11 | 3.11 | 3.7 |
-| Ray | 2.40.0 | 2.40.0 | 1.3.0 |
-| PyTorch | 2.2.0 (CPU) | 2.1.2 (GPU) | 1.8.1 |
-| CUDA | N/A | 11.8 | 10.2 |
-| vLLM | ❌ | ✅ | ❌ |
-| Use Case | Testing | Production | Legacy |
+### Issue: vLLM import fails on CPU nodes
+
+**Error:**
+```
+ModuleNotFoundError: No module named 'vllm'
+```
+
+**Explanation:**
+This is expected on CPU-only nodes. The workload code automatically falls back to Transformers for CPU inference.
+
+**Solution:**
+No action needed. The code handles this automatically based on the `device: "cpu"` config parameter.
+
+### Issue: CUDA version mismatch
+
+**Error:**
+```
+RuntimeError: CUDA error: no kernel image is available for execution on the device
+```
+
+**Solution:**
+Your GPU may require a different CUDA version. Check your GPU's compute capability:
+```bash
+nvidia-smi --query-gpu=compute_cap --format=csv
+
+# For newer GPUs (compute capability 8.0+), you may need CUDA 12.x
+# Modify ray_2x.yml to use cudatoolkit=12.1
+```
+
+### Issue: Out of memory during environment creation
+
+**Solution:**
+Clear conda cache and try again:
+```bash
+conda clean --all
+conda env create -f sample_conda_env/ray_2x.yml
+```
+
+## Environment Management
+
+### List environments
+```bash
+conda env list
+```
+
+### Activate environment
+```bash
+conda activate ray
+```
+
+### Deactivate environment
+```bash
+conda deactivate
+```
+
+### Remove environment
+```bash
+conda env remove -n ray
+```
+
+### Update environment
+```bash
+conda env update -f sample_conda_env/ray_2x.yml --prune
+```
+
+### Export environment
+```bash
+conda activate ray
+conda env export > my_environment.yml
+```
+
+## Migration from Separate Environments
+
+If you previously used separate `ray_gpu` and `ray_cpu` environments:
+
+1. **Remove old environments:**
+   ```bash
+   conda env remove -n ray_gpu
+   conda env remove -n ray_cpu
+   ```
+
+2. **Create unified environment:**
+   ```bash
+   conda env create -f sample_conda_env/ray_2x.yml
+   ```
+
+3. **Update your workflow:**
+   - Always use `conda activate ray`
+   - No need to switch environments based on GPU/CPU
+   - The workload code handles backend selection automatically
+
+## Legacy Environments (Deprecated)
+
+The following environment files are kept for reference but are deprecated:
+- `ray_2x_gpu.yml` - Use `ray_2x.yml` instead
+- `ray_2x_cpu.yml` - Use `ray_2x.yml` instead
+- `sample_ray_env.yml` - Ray 1.x (legacy)
 
 ## Best Practices
 
-1. **Use CPU environment for development:**
-   - Faster iteration
-   - No GPU required
-   - Test with small models (gpt2)
+1. **Use single environment:**
+   - Simpler management
+   - No environment switching
+   - Consistent dependencies
 
-2. **Use GPU environment for production:**
-   - Better performance
-   - Support for large models
-   - vLLM optimization
+2. **Let code handle backend selection:**
+   - Set `device: "gpu"` or `device: "cpu"` in config
+   - Workload automatically uses appropriate backend
+   - vLLM for GPU, Transformers for CPU
 
-3. **Keep environments separate:**
-   - Don't mix CPU and GPU packages
-   - Use different environment names
-   - Document which environment is used
-
-4. **Version control:**
-   - Commit environment files to git
+3. **Version control:**
+   - Commit environment file to git
    - Document any manual installation steps
    - Test environment creation regularly
+
+4. **Resource allocation:**
+   - Use `gpus_per_worker: 0` for CPU workloads
+   - Use `gpus_per_worker: 1+` for GPU workloads
+   - LSF will schedule appropriately
 
 ## Additional Resources
 
@@ -282,6 +241,7 @@ print("All tests passed!")
 - **Ray Documentation**: https://docs.ray.io/
 - **PyTorch Installation**: https://pytorch.org/get-started/locally/
 - **vLLM Documentation**: https://docs.vllm.ai/
+- **Transformers Documentation**: https://huggingface.co/docs/transformers/
 
 ## Support
 
