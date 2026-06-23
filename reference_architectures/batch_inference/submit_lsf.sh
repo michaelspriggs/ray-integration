@@ -28,17 +28,12 @@ while [[ $# -gt 0 ]]; do
       echo "  --config CONFIG_FILE    Path to configuration file"
       echo ""
       echo "Optional arguments:"
-      echo "  --dry-run              Preview the bsub command without submitting"
+      echo "  --dry-run              Preview submission script"
       echo "  -h, --help             Show this help message"
-      echo ""
-      echo "Examples:"
-      echo "  $0 --config config/config.yaml"
-      echo "  $0 --config config/config.yaml --dry-run"
       exit 0
       ;;
     *)
       echo "Unknown option: $1" >&2
-      echo "Use --help for usage information" >&2
       exit 1
       ;;
   esac
@@ -49,11 +44,9 @@ done
 # --------------------------------------------
 if [[ -z "$CONFIG_PATH" ]]; then
   echo "ERROR: --config is required" >&2
-  echo "Use --help for usage information" >&2
   exit 1
 fi
 
-# Resolve to absolute path
 CONFIG_PATH="$(cd "$(dirname "$CONFIG_PATH")" && pwd)/$(basename "$CONFIG_PATH")"
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -66,17 +59,11 @@ echo "Using configuration file: $CONFIG_PATH"
 cd "${REPO_ROOT}"
 
 # --------------------------------------------
-# Parse config.yaml using Python + PyYAML
+# Parse config via Python
 # --------------------------------------------
 eval "$(
-python3 - "$CONFIG_PATH" "$REPO_ROOT" <<'PY' 2>/dev/null || echo "# Python validation skipped"
-import sys
-try:
-    import yaml
-except ImportError:
-    # PyYAML not available, skip validation
-    sys.exit(0)
-import shlex
+python3 - "$CONFIG_PATH" "$REPO_ROOT" <<'PY'
+import sys, yaml, shlex, os
 
 config_path = sys.argv[1]
 repo_root = sys.argv[2]
@@ -84,52 +71,91 @@ repo_root = sys.argv[2]
 with open(config_path) as f:
     cfg = yaml.safe_load(f)
 
-lsf = cfg.get("lsf", {})
+# ------------------------
+# Required sections
+# ------------------------
+if "lsf" not in cfg:
+    raise ValueError("Missing required section: lsf")
+if "model" not in cfg:
+    raise ValueError("Missing required section: model")
+if "data" not in cfg:
+    raise ValueError("Missing required section: data")
+if "execution" not in cfg:
+    raise ValueError("Missing required section: execution")
+
+lsf = cfg["lsf"]
+model = cfg["model"]
+data = cfg["data"]
+execution = cfg["execution"]
 
 # ------------------------
-# Validation
+# LSF validation
 # ------------------------
 required = ["num_workers", "cpus_per_worker", "gpus_per_worker"]
-for key in required:
-    if key not in lsf:
-        raise ValueError(f"Missing required field: lsf.{key}")
+for k in required:
+    if k not in lsf:
+        raise ValueError(f"Missing lsf.{k}")
 
-# Handle "auto" for num_workers - will be resolved later
-num_workers_raw = lsf["num_workers"]
-if num_workers_raw == "auto":
-    num_workers = "auto"
-else:
-    num_workers = int(num_workers_raw)
-    if num_workers <= 0:
-        raise ValueError("lsf.num_workers must be > 0")
-
+num_workers = int(lsf["num_workers"])
 cpus_per_worker = int(lsf["cpus_per_worker"])
+gpus_per_worker = int(lsf["gpus_per_worker"])
+
+if num_workers <= 0:
+    raise ValueError("lsf.num_workers must be > 0")
+
 if cpus_per_worker <= 0:
     raise ValueError("lsf.cpus_per_worker must be > 0")
 
-gpus_per_worker = int(lsf["gpus_per_worker"])
 if gpus_per_worker < 0:
     raise ValueError("lsf.gpus_per_worker must be >= 0")
 
-# Calculate total slots needed
-if num_workers != "auto":
-    total_slots = num_workers * cpus_per_worker
-else:
-    total_slots = "auto"
+# ------------------------
+# Device validation
+# ------------------------
+device = execution.get("device", "cpu")
+
+if device == "gpu" and gpus_per_worker == 0:
+    raise ValueError("execution.device=gpu but gpus_per_worker=0")
+
+if device == "cpu" and gpus_per_worker > 0:
+    print("# WARNING: GPUs allocated but execution.device=cpu", file=sys.stderr)
 
 # ------------------------
-# Helpers
+# Tensor parallel validation
 # ------------------------
-def emit(name, value):
-    print(f"{name}={shlex.quote(str(value))}")
+tp = int(model.get("tensor_parallel_size", 1))
+
+if gpus_per_worker > 0 and tp != gpus_per_worker:
+    raise ValueError(
+        f"tensor_parallel_size ({tp}) must equal gpus_per_worker ({gpus_per_worker})"
+    )
 
 # ------------------------
-# Emit environment
+# Data validation
 # ------------------------
-emit("TOTAL_WORKERS", num_workers)
+if "output_dir" not in data:
+    raise ValueError("data.output_dir is required")
+
+output_dir = data["output_dir"]
+output_dir = output_dir.replace("{repo_root}", repo_root)
+output_dir = output_dir.replace("{job_id}", "%J")
+
+# Optional: validate input file
+input_path = data.get("input_path")
+if input_path:
+    resolved_input = input_path.replace("{repo_root}", repo_root)
+    if not os.path.exists(resolved_input):
+        raise FileNotFoundError(f"Input file not found: {resolved_input}")
+
+# ------------------------
+# Emit values
+# ------------------------
+def emit(name, val):
+    print(f"{name}={shlex.quote(str(val))}")
+
+emit("NUM_WORKERS", num_workers)
 emit("CPUS_PER_WORKER", cpus_per_worker)
 emit("GPUS_PER_WORKER", gpus_per_worker)
-emit("TOTAL_SLOTS", total_slots)
 emit("INTERACTIVE", str(lsf.get("interactive", False)).lower())
 
 if "queue" in lsf:
@@ -138,127 +164,79 @@ if "queue" in lsf:
 if "job_name" in lsf:
     emit("JOB_NAME", lsf["job_name"])
 
-# Get output_dir from data section for LSF log file
-data = cfg.get("data", {})
-if "output_dir" in data:
-    output_dir = data["output_dir"]
-    output_dir = output_dir.replace("{repo_root}", repo_root)
-    output_dir = output_dir.replace("{job_id}", "%J")
-    output_log = f"{output_dir}/lsf.log"
-    emit("OUTPUT_LOG", output_log)
-
 if "memory_per_worker" in lsf:
     emit("MEMORY_PER_WORKER", lsf["memory_per_worker"])
+
+emit("OUTPUT_DIR", output_dir)
+
 PY
 )"
 
-# --------------------------------------------
-# Fallback: Parse config with grep/sed if Python failed
-# --------------------------------------------
-if [[ -z "${TOTAL_WORKERS:-}" ]]; then
-  echo "Warning: Python config parsing failed, using grep/sed fallback" >&2
-  
-  # Extract values using grep and sed (|| true to prevent failures on missing fields)
-  TOTAL_WORKERS=$(grep -E '^\s*num_workers:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" | tr -d ' ' || true)
-  CPUS_PER_WORKER=$(grep -E '^\s*cpus_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' || true)
-  GPUS_PER_WORKER=$(grep -E '^\s*gpus_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' || true)
-  QUEUE=$(grep -E '^\s*queue:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  JOB_NAME=$(grep -E '^\s*job_name:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  
-  # Get output_dir from data section for LSF log file
-  OUTPUT_DIR=$(grep -A 10 '^data:' "$CONFIG_PATH" 2>/dev/null | grep -E '^\s*output_dir:' | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  if [[ -n "$OUTPUT_DIR" ]]; then
-    OUTPUT_DIR="${OUTPUT_DIR//\{repo_root\}/$REPO_ROOT}"
-    OUTPUT_DIR="${OUTPUT_DIR//\{job_id\}/%J}"
-    OUTPUT_LOG="${OUTPUT_DIR}/lsf.log"
-  fi
-  
-  MEMORY_PER_WORKER=$(grep -E '^\s*memory_per_worker:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  INTERACTIVE=$(grep -E '^\s*interactive:' "$CONFIG_PATH" 2>/dev/null | tail -1 | sed 's/.*:\s*//' | tr -d '"' | tr -d "'" || true)
-  
-  # Calculate total slots
-  if [[ "$TOTAL_WORKERS" != "auto" ]] && [[ -n "$CPUS_PER_WORKER" ]]; then
-    TOTAL_SLOTS=$((TOTAL_WORKERS * CPUS_PER_WORKER))
-  else
-    TOTAL_SLOTS="auto"
-  fi
-  
-  # Convert boolean strings
-  [[ "$INTERACTIVE" == "true" ]] && INTERACTIVE="true" || INTERACTIVE="false"
+if [[ -z "${NUM_WORKERS:-}" ]]; then
+  echo "ERROR: Failed to parse config (PyYAML required)" >&2
+  exit 1
 fi
 
 # --------------------------------------------
-# Handle defaults and "auto" for num_workers
+# Derived variables
 # --------------------------------------------
-# Set defaults if not set
-TOTAL_WORKERS="${TOTAL_WORKERS:-1}"
-CPUS_PER_WORKER="${CPUS_PER_WORKER:-1}"
-
-# Handle "auto" for num_workers
-if [[ "${TOTAL_WORKERS}" == "auto" ]]; then
-  # When execution.num_workers is "auto", use lsf.num_workers
-  # This should already be set from the Python parsing, but fallback to 1
-  TOTAL_WORKERS="1"
+if [[ -n "${OUTPUT_DIR:-}" ]]; then
+  OUTPUT_LOG="${OUTPUT_DIR}/logs/lsf.log"
+  mkdir -p "$(dirname "${OUTPUT_LOG}")"
 fi
 
-# Calculate total slots
-TOTAL_SLOTS=$((TOTAL_WORKERS * CPUS_PER_WORKER))
+echo "Workers: ${NUM_WORKERS}"
+echo "CPUs/worker: ${CPUS_PER_WORKER}"
+echo "GPUs/worker: ${GPUS_PER_WORKER}"
 
 # --------------------------------------------
-# Generate LSF submission script
+# Generate submission script
 # --------------------------------------------
 SUBMIT_SCRIPT="/tmp/ray_submit_${USER}_$$.sh"
 
-cat > "${SUBMIT_SCRIPT}" <<'EOF'
+cat > "${SUBMIT_SCRIPT}" <<EOF
 #!/bin/bash
 EOF
 
-# Add LSF directives (always add them to the script)
 [[ -n "${JOB_NAME:-}" ]] && echo "#BSUB -J ${JOB_NAME}" >> "${SUBMIT_SCRIPT}"
 [[ -n "${QUEUE:-}" ]] && echo "#BSUB -q ${QUEUE}" >> "${SUBMIT_SCRIPT}"
-[[ -n "${TOTAL_SLOTS:-}" ]] && echo "#BSUB -n ${TOTAL_SLOTS}" >> "${SUBMIT_SCRIPT}"
+[[ -n "${NUM_WORKERS:-}" ]] && echo "#BSUB -n ${NUM_WORKERS}" >> "${SUBMIT_SCRIPT}"
 
-# Output log (skip if interactive mode)
-if [[ "${INTERACTIVE:-false}" != "true" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
+if [[ "${INTERACTIVE:-false}" != "true" && -n "${OUTPUT_LOG:-}" ]]; then
   echo "#BSUB -o ${OUTPUT_LOG}" >> "${SUBMIT_SCRIPT}"
 fi
 
-# GPU allocation
-if [[ -n "${GPUS_PER_WORKER:-}" ]] && [[ "${GPUS_PER_WORKER}" -gt 0 ]]; then
-  echo "#BSUB -gpu \"num=${GPUS_PER_WORKER}/host:j_exclusive=yes\"" >> "${SUBMIT_SCRIPT}"
+if [[ -n "${GPUS_PER_WORKER}" && "${GPUS_PER_WORKER}" -gt 0 ]]; then
+  echo "#BSUB -gpu \"num=${GPUS_PER_WORKER}/task:j_exclusive=yes\"" >> "${SUBMIT_SCRIPT}"
 fi
 
-# Resource requirements
-resource_requirements=()
-[[ -n "${MEMORY_PER_WORKER:-}" ]] && resource_requirements+=("rusage[mem=${MEMORY_PER_WORKER}/host]")
-[[ -n "${CPUS_PER_WORKER:-}" ]] && resource_requirements+=("span[ptile=${CPUS_PER_WORKER}]")
-
-if [[ ${#resource_requirements[@]} -gt 0 ]]; then
-  combined_requirements="$(printf "%s " "${resource_requirements[@]}")"
-  combined_requirements="${combined_requirements% }"
-  echo "#BSUB -R \"${combined_requirements}\"" >> "${SUBMIT_SCRIPT}"
+if [[ -n "${MEMORY_PER_WORKER:-}" ]]; then
+  echo "#BSUB -R \"rusage[mem=${MEMORY_PER_WORKER}/task]\"" >> "${SUBMIT_SCRIPT}"
 fi
 
-# Add blank line after directives
+if [[ -n "${CPUS_PER_WORKER:-}" ]]; then
+  echo "#BSUB -R \"affinity[core(${CPUS_PER_WORKER})]\"" >> "${SUBMIT_SCRIPT}"
+fi
+
 echo "" >> "${SUBMIT_SCRIPT}"
 
-# Add the execution command
 cat >> "${SUBMIT_SCRIPT}" <<EOF
-# Execute workload
+
+# Pass resource info to Ray
+export CPUS_PER_WORKER=${CPUS_PER_WORKER}
+export GPUS_PER_WORKER=${GPUS_PER_WORKER}
+
 ${REPO_ROOT}/common/run.sh --config '${CONFIG_PATH}' --workload-dir '${SCRIPT_DIR}'
 EOF
 
 chmod +x "${SUBMIT_SCRIPT}"
 
 # --------------------------------------------
-# Handle dry-run or submission
+# Dry-run
 # --------------------------------------------
-if [[ "${DRY_RUN:-false}" == "true" ]]; then
-  echo "=== Dry-run mode: Generated submission script ==="
-  echo ""
+if [[ "${DRY_RUN}" == "true" ]]; then
+  echo "=== Dry-run: Submission script ==="
   cat "${SUBMIT_SCRIPT}"
-  echo ""
-  echo "=== End of submission script ==="
   rm -f "${SUBMIT_SCRIPT}"
   exit 0
 fi
@@ -266,75 +244,37 @@ fi
 # --------------------------------------------
 # Submit job
 # --------------------------------------------
-echo "Submitting job from script: ${SUBMIT_SCRIPT}"
+echo "Submitting job..."
 echo ""
 
 if [[ "${INTERACTIVE:-false}" == "true" ]]; then
-  # Interactive mode: use bsub -Is with the script, capture output with tee
-  TEMP_OUTPUT="/tmp/bsub_output_${USER}_$$.txt"
+  TEMP_OUTPUT="/tmp/bsub_${USER}_$$.txt"
   bsub -Is < "${SUBMIT_SCRIPT}" 2>&1 | tee "${TEMP_OUTPUT}"
   JOB_RESULT=${PIPESTATUS[0]}
-  
-  # Extract job ID from captured output
-  if [[ $JOB_RESULT -eq 0 ]] && [[ -f "${TEMP_OUTPUT}" ]]; then
-    JOB_ID=$(grep -oP 'Job <\K[0-9]+(?=>)' "${TEMP_OUTPUT}" | head -1)
-    
-    # For interactive jobs, use OUTPUT_DIR from config (not OUTPUT_LOG)
-    if [[ -n "${JOB_ID}" ]]; then
-      # Get output directory from config's data.output_dir
-      if [[ -n "${OUTPUT_LOG:-}" ]]; then
-        # If OUTPUT_LOG is set, derive directory from it
-        ACTUAL_OUTPUT_DIR="${OUTPUT_LOG//%J/${JOB_ID}}"
-        ACTUAL_OUTPUT_DIR="$(dirname "${ACTUAL_OUTPUT_DIR}")"
-      else
-        # For interactive mode without OUTPUT_LOG, construct from repo root
-        ACTUAL_OUTPUT_DIR="${REPO_ROOT}/outputs/batch_inference/${JOB_ID}"
-      fi
-      
-      # Create output directory and move submission script
-      mkdir -p "${ACTUAL_OUTPUT_DIR}"
-      mv "${SUBMIT_SCRIPT}" "${ACTUAL_OUTPUT_DIR}/submit.sh"
-      echo ""
-      echo "Submission script saved to: ${ACTUAL_OUTPUT_DIR}/submit.sh"
-    else
-      # Cleanup if we couldn't determine job ID
-      rm -f "${SUBMIT_SCRIPT}"
-    fi
-    rm -f "${TEMP_OUTPUT}"
-  else
-    # Cleanup on failure
-    rm -f "${SUBMIT_SCRIPT}"
-    rm -f "${TEMP_OUTPUT}"
-  fi
+  JOB_ID=$(grep -oE 'Job <[0-9]+>' "${TEMP_OUTPUT}" | grep -oE '[0-9]+' | head -1)
+  rm -f "${TEMP_OUTPUT}"
 else
-  # Batch mode: submit and capture job ID
   SUBMIT_OUTPUT=$(bsub < "${SUBMIT_SCRIPT}" 2>&1)
   JOB_RESULT=$?
   echo "${SUBMIT_OUTPUT}"
-  
-  # Extract job ID from output (format: "Job <12345> is submitted to queue <normal>.")
-  if [[ $JOB_RESULT -eq 0 ]]; then
-    JOB_ID=$(echo "${SUBMIT_OUTPUT}" | grep -oP 'Job <\K[0-9]+(?=>)')
-    
-    if [[ -n "${JOB_ID}" ]] && [[ -n "${OUTPUT_LOG:-}" ]]; then
-      # Resolve output directory (replace %J with actual job ID)
-      ACTUAL_OUTPUT_DIR="${OUTPUT_LOG//%J/${JOB_ID}}"
-      ACTUAL_OUTPUT_DIR="$(dirname "${ACTUAL_OUTPUT_DIR}")"
-      
-      # Create output directory and move submission script
-      mkdir -p "${ACTUAL_OUTPUT_DIR}"
-      mv "${SUBMIT_SCRIPT}" "${ACTUAL_OUTPUT_DIR}/submit.sh"
-      echo ""
-      echo "Submission script saved to: ${ACTUAL_OUTPUT_DIR}/submit.sh"
-    else
-      # Cleanup if we couldn't determine job ID or output dir
-      rm -f "${SUBMIT_SCRIPT}"
-    fi
-  else
-    # Cleanup on failure
-    rm -f "${SUBMIT_SCRIPT}"
-  fi
+  JOB_ID=$(echo "${SUBMIT_OUTPUT}" | grep -oE 'Job <[0-9]+>' | grep -oE '[0-9]+')
 fi
 
-exit $JOB_RESULT
+# --------------------------------------------
+# Post-submission handling (UNIFIED)
+# --------------------------------------------
+if [[ "${JOB_RESULT}" -eq 0 && -n "${JOB_ID:-}" && -n "${OUTPUT_DIR:-}" ]]; then
+  ACTUAL_OUTPUT_DIR="${OUTPUT_DIR//%J/${JOB_ID}}"
+
+  mkdir -p "${ACTUAL_OUTPUT_DIR}"
+  mv "${SUBMIT_SCRIPT}" "${ACTUAL_OUTPUT_DIR}/submit.sh"
+
+  echo ""
+  echo "Job ID: ${JOB_ID}"
+  echo "Output directory: ${ACTUAL_OUTPUT_DIR}"
+else
+  rm -f "${SUBMIT_SCRIPT}"
+fi
+
+exit ${JOB_RESULT}
 

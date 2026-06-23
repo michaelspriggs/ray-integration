@@ -16,6 +16,17 @@ cat "$LSB_DJOB_HOSTFILE"
 echo ""
 
 # --------------------------------------------
+# Resource configuration from LSF
+# --------------------------------------------
+CPUS_PER_WORKER="${CPUS_PER_WORKER:-1}"
+GPUS_PER_WORKER="${GPUS_PER_WORKER:-0}"
+
+echo "Resource allocation:"
+echo "  CPUs per worker: ${CPUS_PER_WORKER}"
+echo "  GPUs per worker: ${GPUS_PER_WORKER}"
+echo ""
+
+# --------------------------------------------
 # Build host list
 # --------------------------------------------
 # Get unique hosts
@@ -72,17 +83,36 @@ echo "Object store memory: $object_store_mem"
 # --------------------------------------------
 # Start head
 # --------------------------------------------
-num_cpu_head="${cores_per_host[$head_node]}"
+# Calculate total CPUs: workers on this host × CPUs per worker
+num_workers_head="${cores_per_host[$head_node]}"
+num_cpu_head=$(( num_workers_head * CPUS_PER_WORKER ))
 
-echo "Starting Ray head..."
-blaunch -z "$head_node" \
-  "ray start --head \
-    --port $port \
-    --dashboard-port $dashboard_port \
-    --num-cpus $num_cpu_head \
-    --object-store-memory $object_store_mem \
-    --dashboard-host 0.0.0.0 \
-    --node-ip-address $head_node_ip" &
+echo "Starting Ray head on ${head_node}..."
+echo "  Workers: ${num_workers_head}"
+echo "  Total CPUs: ${num_cpu_head}"
+
+# Build Ray start command
+ray_head_cmd="ray start --head \
+  --port $port \
+  --dashboard-port $dashboard_port \
+  --num-cpus $num_cpu_head \
+  --object-store-memory $object_store_mem \
+  --dashboard-host 0.0.0.0 \
+  --node-ip-address $head_node_ip"
+
+# Add GPU configuration if GPUs are allocated
+if [[ $GPUS_PER_WORKER -gt 0 ]]; then
+  # Count GPUs from CUDA_VISIBLE_DEVICES (set by LSF)
+  # This will be evaluated on the remote host via blaunch
+  ray_head_cmd="export CUDA_VISIBLE_DEVICES=\${CUDA_VISIBLE_DEVICES:-}; \
+    num_gpus=\$(echo \"\${CUDA_VISIBLE_DEVICES}\" | grep -o ',' | wc -l); \
+    num_gpus=\$((num_gpus + 1)); \
+    [[ -z \"\${CUDA_VISIBLE_DEVICES}\" ]] && num_gpus=0; \
+    echo \"  GPUs detected: \${num_gpus}\"; \
+    ${ray_head_cmd} --num-gpus \${num_gpus}"
+fi
+
+blaunch -z "$head_node" "${ray_head_cmd}" &
 
 sleep 5
 
@@ -100,15 +130,32 @@ echo "Head ready ✔"
 workers=("${hosts[@]:1}")
 
 for host in "${workers[@]}"; do
-  echo "Starting worker on $host"
+  # Calculate total CPUs: workers on this host × CPUs per worker
+  num_workers_host="${cores_per_host[$host]}"
+  num_cpu=$(( num_workers_host * CPUS_PER_WORKER ))
 
-  num_cpu="${cores_per_host[$host]}"
+  echo "Starting worker on ${host}..."
+  echo "  Workers: ${num_workers_host}"
+  echo "  Total CPUs: ${num_cpu}"
 
-  blaunch -z "$host" \
-    "ray start \
-      --address $head_node_ip:$port \
-      --num-cpus $num_cpu \
-      --object-store-memory $object_store_mem" &
+  # Build Ray start command
+  ray_worker_cmd="ray start \
+    --address $head_node_ip:$port \
+    --num-cpus $num_cpu \
+    --object-store-memory $object_store_mem"
+
+  # Add GPU configuration if GPUs are allocated
+  if [[ $GPUS_PER_WORKER -gt 0 ]]; then
+    # Count GPUs from CUDA_VISIBLE_DEVICES (set by LSF)
+    ray_worker_cmd="export CUDA_VISIBLE_DEVICES=\${CUDA_VISIBLE_DEVICES:-}; \
+      num_gpus=\$(echo \"\${CUDA_VISIBLE_DEVICES}\" | grep -o ',' | wc -l); \
+      num_gpus=\$((num_gpus + 1)); \
+      [[ -z \"\${CUDA_VISIBLE_DEVICES}\" ]] && num_gpus=0; \
+      echo \"  GPUs detected: \${num_gpus}\"; \
+      ${ray_worker_cmd} --num-gpus \${num_gpus}"
+  fi
+
+  blaunch -z "$host" "${ray_worker_cmd}" &
 
   # Wait for worker
   sleep 3
