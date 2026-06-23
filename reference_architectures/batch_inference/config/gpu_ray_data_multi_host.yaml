@@ -19,7 +19,7 @@ execution:
 
 model:
   name: "facebook/opt-1.3b"
-  tensor_parallel_size: 1
+  tensor_parallel_size: 2
   max_model_len: 2048
   max_num_seqs: 256
   gpu_memory_utilization: 0.9
