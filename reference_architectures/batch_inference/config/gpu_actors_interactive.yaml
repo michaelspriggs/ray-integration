@@ -3,10 +3,11 @@
 # Uses OPT-1.3B model (no authentication required, fits in single GPU).
 
 lsf:
-  num_workers: 1
+  num_workers: 2
   cpus_per_worker: 2
   gpus_per_worker: 1
   memory_per_worker: "8GB"
+  use_affinity: true
   interactive: true
 
 execution:

@@ -8,6 +8,7 @@ lsf:
   cpus_per_worker: 4
   gpus_per_worker: 1
   memory_per_worker: "8GB"
+  use_affinity: true
   interactive: false
 
 execution:

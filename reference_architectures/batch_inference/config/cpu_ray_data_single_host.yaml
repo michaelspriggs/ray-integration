@@ -4,9 +4,10 @@
 
 lsf:
   num_workers: 1
-  cpus_per_worker: 4
+  cpus_per_worker: 1
   gpus_per_worker: 0
   memory_per_worker: "4GB"
+  use_affinity: false
   interactive: false
 
 execution:

@@ -99,6 +99,7 @@ for k in required:
 num_workers = int(lsf["num_workers"])
 cpus_per_worker = int(lsf["cpus_per_worker"])
 gpus_per_worker = int(lsf["gpus_per_worker"])
+use_affinity = lsf.get("use_affinity", False)
 
 if num_workers <= 0:
     raise ValueError("lsf.num_workers must be > 0")
@@ -108,6 +109,14 @@ if cpus_per_worker <= 0:
 
 if gpus_per_worker < 0:
     raise ValueError("lsf.gpus_per_worker must be >= 0")
+
+# ------------------------
+# Affinity validation
+# ------------------------
+if not use_affinity and cpus_per_worker != 1:
+    raise ValueError(
+        f"When lsf.use_affinity=false, lsf.cpus_per_worker must be 1 (got {cpus_per_worker})"
+    )
 
 # ------------------------
 # Device validation
@@ -156,6 +165,7 @@ def emit(name, val):
 emit("NUM_WORKERS", num_workers)
 emit("CPUS_PER_WORKER", cpus_per_worker)
 emit("GPUS_PER_WORKER", gpus_per_worker)
+emit("USE_AFFINITY", str(use_affinity).lower())
 emit("INTERACTIVE", str(lsf.get("interactive", False)).lower())
 
 if "queue" in lsf:
@@ -214,7 +224,7 @@ if [[ -n "${MEMORY_PER_WORKER:-}" ]]; then
   echo "#BSUB -R \"rusage[mem=${MEMORY_PER_WORKER}/task]\"" >> "${SUBMIT_SCRIPT}"
 fi
 
-if [[ -n "${CPUS_PER_WORKER:-}" ]]; then
+if [[ "${USE_AFFINITY:-false}" == "true" && -n "${CPUS_PER_WORKER:-}" ]]; then
   echo "#BSUB -R \"affinity[core(${CPUS_PER_WORKER})]\"" >> "${SUBMIT_SCRIPT}"
 fi
 
