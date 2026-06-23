@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import ray
-from tqdm import tqdm
 
 from common.utils import (
     load_config,
@@ -19,7 +18,6 @@ from common.utils import (
     load_jsonl_prompts,
     validate_config,
     configure_logging,
-    ensure_dir,
 )
 
 
@@ -51,16 +49,14 @@ class VLLMWorker:
         msg = f"[Actor {os.getpid()}] Initializing worker model={model_name} tp={tensor_parallel_size}"
         print(msg, flush=True)
         logger.info(msg)
-        
+
         msg = f"[Actor {os.getpid()}] CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}"
         print(msg, flush=True)
         logger.info(msg)
 
         try:
-            print(f"[Actor {os.getpid()}] Importing vLLM...", flush=True)
             from vllm import LLM, SamplingParams
 
-            print(f"[Actor {os.getpid()}] Creating LLM instance...", flush=True)
             if cpu_only:
                 self.llm = LLM(
                     model=model_name,
@@ -81,6 +77,7 @@ class VLLMWorker:
                 )
 
             self.SamplingParams = SamplingParams
+
             msg = f"[Actor {os.getpid()}] Worker initialized successfully"
             print(msg, flush=True)
             logger.info(msg)
@@ -93,7 +90,6 @@ class VLLMWorker:
 
     def generate(self, prompts: List[str], params: Dict[str, Any]):
         sampling = self.SamplingParams(**params)
-
         outputs = self.llm.generate(prompts, sampling)
 
         results = []
@@ -124,21 +120,18 @@ def create_workers(config: Dict[str, Any], num_gpus_available: int):
 
     device = exec_cfg.get("device", "gpu")
     cpu_only = device == "cpu"
-    
-    # Read cpus_per_worker from LSF section
+
     cpus_per_worker = lsf_cfg.get("cpus_per_worker", 1)
 
     tensor_parallel_size = model.get("tensor_parallel_size", 1)
     if tensor_parallel_size == "auto":
         tensor_parallel_size = 1
 
-    # ✅ Correct auto behavior: match LSF
     if exec_cfg["num_workers"] == "auto":
         num_workers = lsf_cfg["num_workers"]
     else:
         num_workers = exec_cfg["num_workers"]
 
-    # ✅ Validation
     if not cpu_only:
         total_required_gpus = num_workers * tensor_parallel_size
         if total_required_gpus > num_gpus_available:
@@ -173,11 +166,7 @@ def create_workers(config: Dict[str, Any], num_gpus_available: int):
 # --------------------------------------------
 # Backpressure Scheduler
 # --------------------------------------------
-def run_batch_inference(
-    workers,
-    prompts,
-    config: Dict[str, Any],
-):
+def run_batch_inference(workers, prompts, config: Dict[str, Any]):
     batch_size = config["execution"]["batch_size"]
     gen_cfg = config["generation"]
 
@@ -232,31 +221,33 @@ def save_results(results, output_path: str):
 # --------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
-        description="Batch inference with vLLM on Ray + LSF"
+        description="Batch inference with Ray Actors (vLLM)"
     )
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
 
-    # ✅ Load + validate config
+    # Load + validate config
     config = load_config(args.config)
     validate_config(config)
 
-    # ✅ Logging
     configure_logging(config["logging"].get("level", "INFO"))
 
-    logger.info("=== Ray + vLLM Batch Inference ===")
+    logger.info("=== Ray Actor Batch Inference ===")
     logger.info(f"Model: {config['model']['name']}")
 
-    # ✅ Connect to Ray
     ray.init(address="auto")
 
     resources = ray.cluster_resources()
     num_gpus = int(resources.get("GPU", 0))
     num_cpus = int(resources.get("CPU", 0))
 
-    logger.info(f"Cluster resources: {num_cpus} CPUs, {num_gpus} GPUs")
+    logger.info(f"Cluster resources: CPUs={num_cpus}, GPUs={num_gpus}")
 
-    # ✅ Load prompts
+    # ✅ Create output dir EARLY
+    output_dir = Path(resolve_path(config["data"]["output_dir"]))
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load prompts
     input_path = resolve_path(config["data"]["input_path"])
     prompts = load_jsonl_prompts(
         input_path,
@@ -266,31 +257,25 @@ def main():
     if not prompts:
         raise RuntimeError("No prompts loaded")
 
-    # ✅ Create workers
+    # Create workers
     workers = create_workers(config, num_gpus)
 
-    # Warmup
     logger.info("Warming up workers...")
     ray.get([w.get_model_info.remote() for w in workers])
 
     start_time = time.time()
 
-    # ✅ Run inference
+    # Run inference
     results = run_batch_inference(workers, prompts, config)
 
-    # ✅ Save output
-    output_dir = Path(resolve_path(config["data"]["output_dir"]))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Copy config file to output directory
+    # Save config
     shutil.copy(args.config, output_dir / "config.yaml")
-    logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
-    
+
     # Save results
     output_path = output_dir / "results.jsonl"
     save_results(results, str(output_path))
 
-    # ✅ Stats
+    # Stats
     elapsed = time.time() - start_time
     logger.info(f"Processed {len(prompts)} prompts in {elapsed:.2f}s")
     logger.info(f"Throughput: {len(prompts)/elapsed:.2f} prompts/sec")

@@ -6,7 +6,7 @@
 lsf:
   num_workers: 2
   cpus_per_worker: 4
-  gpus_per_worker: 2
+  gpus_per_worker: 1
   memory_per_worker: "8GB"
   interactive: false
 

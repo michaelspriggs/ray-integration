@@ -6,7 +6,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 import ray
 import ray.data
@@ -16,15 +16,12 @@ from common.utils import (
     resolve_path,
     validate_config,
     configure_logging,
-    ensure_dir,
 )
-
 
 # --------------------------------------------
 # Logging
 # --------------------------------------------
 logger = logging.getLogger(__name__)
-
 
 # --------------------------------------------
 # Global model (per Ray worker process)
@@ -55,25 +52,23 @@ class VLLMInference:
             logger.info(f"CPU-only mode: {self.cpu_only}")
 
             if self.cpu_only:
-                # Use HuggingFace Transformers for CPU-only inference
-                logger.info(f"[Worker {os.getpid()}] Using HuggingFace Transformers for CPU inference")
+                # CPU inference (Transformers)
                 from transformers import AutoTokenizer, AutoModelForCausalLM
                 import torch
-                
+
                 _model = {
-                    'tokenizer': AutoTokenizer.from_pretrained(self.model_cfg["name"]),
-                    'model': AutoModelForCausalLM.from_pretrained(
+                    "tokenizer": AutoTokenizer.from_pretrained(self.model_cfg["name"]),
+                    "model": AutoModelForCausalLM.from_pretrained(
                         self.model_cfg["name"],
                         torch_dtype=torch.float32,
-                        device_map="cpu"
+                        device_map="cpu",
                     ),
-                    'device': 'cpu'
                 }
-                _sampling_params_class = None  # Not used for Transformers
-                logger.info(f"[Worker {os.getpid()}] HuggingFace model loaded on CPU")
+
+                logger.info(f"[Worker {os.getpid()}] HF model loaded (CPU)")
+
             else:
-                # Use vLLM for GPU inference
-                logger.info(f"[Worker {os.getpid()}] Using vLLM for GPU inference")
+                # GPU inference (vLLM)
                 from vllm import LLM, SamplingParams
                 _sampling_params_class = SamplingParams
 
@@ -90,50 +85,60 @@ class VLLMInference:
                     quantization=self.model_cfg.get("quantization"),
                     dtype=self.model_cfg.get("dtype", "half"),
                 )
+
                 logger.info(f"[Worker {os.getpid()}] vLLM model loaded")
 
         # Extract prompts
         prompts = batch.get("text") or batch.get("prompt")
-        if prompts is None or (hasattr(prompts, '__len__') and len(prompts) == 0):
-            raise ValueError("Batch must contain 'text' or 'prompt' field")
+        if prompts is None or len(prompts) == 0:
+            raise ValueError("Batch must contain 'text' or 'prompt'")
 
-        # Run inference based on backend
+        # --------------------------------------------
+        # CPU (Transformers)
+        # --------------------------------------------
         if self.cpu_only:
-            # HuggingFace Transformers inference
             import torch
-            tokenizer = _model['tokenizer']
-            model = _model['model']
-            
+
+            tokenizer = _model["tokenizer"]
+            model = _model["model"]
+
             results = {
                 "prompt": [],
                 "generated_text": [],
                 "finish_reason": [],
                 "num_tokens": [],
             }
-            
-            for prompt in prompts:
-                inputs = tokenizer(prompt, return_tensors="pt")
-                
-                with torch.no_grad():
-                    outputs = model.generate(
-                        **inputs,
-                        max_new_tokens=self.gen_cfg["max_tokens"],
-                        temperature=self.gen_cfg["temperature"],
-                        top_p=self.gen_cfg["top_p"],
-                        do_sample=True if self.gen_cfg["temperature"] > 0 else False,
-                        pad_token_id=tokenizer.eos_token_id,
-                    )
-                
-                generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                # Remove the prompt from the generated text
-                generated_text = generated_text[len(prompt):].strip()
-                
+
+            # ✅ Batch tokenize
+            inputs = tokenizer(prompts, return_tensors="pt", padding=True)
+
+            with torch.no_grad():
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=self.gen_cfg["max_tokens"],
+                    temperature=self.gen_cfg["temperature"],
+                    top_p=self.gen_cfg["top_p"],
+                    do_sample=True if self.gen_cfg["temperature"] > 0 else False,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
+
+            # ✅ FIX: use attention mask for correct lengths
+            input_lens = inputs["attention_mask"].sum(dim=1)
+
+            for i, prompt in enumerate(prompts):
+                prompt_len = input_lens[i]
+                generated_ids = outputs[i][prompt_len:]
+                generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
+
                 results["prompt"].append(prompt)
                 results["generated_text"].append([generated_text])
-                results["finish_reason"].append(["length"])  # Simplified
-                results["num_tokens"].append([len(outputs[0]) - len(inputs['input_ids'][0])])
+                results["finish_reason"].append(["stop"])
+                results["num_tokens"].append([len(generated_ids)])
+
+        # --------------------------------------------
+        # GPU (vLLM)
+        # --------------------------------------------
         else:
-            # vLLM inference
             sampling_params = _sampling_params_class(
                 temperature=self.gen_cfg["temperature"],
                 top_p=self.gen_cfg["top_p"],
@@ -164,42 +169,33 @@ class VLLMInference:
 # Main
 # --------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(
-        description="Batch inference with vLLM using Ray Data"
-    )
+    parser = argparse.ArgumentParser(description="Batch inference with Ray Data + vLLM")
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
 
-    # ✅ Load + validate config
+    # Load + validate config
     config = load_config(args.config)
     validate_config(config)
 
-    # ✅ Logging
     configure_logging(config["logging"].get("level", "INFO"))
 
-    logger.info("=== Ray Data + vLLM Batch Inference ===")
+    logger.info("=== Batch Inference ===")
     logger.info(f"Model: {config['model']['name']}")
 
-    # ✅ Connect to Ray
+    # Connect to Ray
     try:
         ray.init(address="auto")
     except Exception as e:
-        logger.error(f"Failed to connect to Ray cluster: {e}")
+        logger.error(f"Failed to connect to Ray: {e}")
         sys.exit(1)
 
     resources = ray.cluster_resources()
-    num_gpus = int(resources.get("GPU", 0))
-    num_cpus = int(resources.get("CPU", 0))
+    logger.info(f"Cluster resources: {resources}")
 
-    logger.info(f"Cluster resources: CPUs={num_cpus}, GPUs={num_gpus}")
-    logger.info(f"Ray resources: {resources}")
-
-    # --------------------------------------------
-    # Dataset loading
-    # --------------------------------------------
+    # Load dataset
     input_path = resolve_path(config["data"]["input_path"])
-
     logger.info(f"Reading dataset: {input_path}")
+
     ds = ray.data.read_json(input_path)
 
     if config["data"].get("max_prompts"):
@@ -211,23 +207,18 @@ def main():
 
     logger.info(f"Loaded {count} prompts")
 
-    # --------------------------------------------
-    # Resource model (LSF-aligned)
-    # --------------------------------------------
+    # Resource planning
     exec_cfg = config["execution"]
     model_cfg = config["model"]
     lsf_cfg = config["lsf"]
 
     cpu_only = exec_cfg.get("device") == "cpu"
-    
-    # Read cpus_per_worker from LSF section
-    cpus_per_worker = lsf_cfg.get("cpus_per_worker", 1)
 
+    cpus_per_worker = lsf_cfg.get("cpus_per_worker", 1)
     tensor_parallel_size = model_cfg.get("tensor_parallel_size", 1)
     if tensor_parallel_size == "auto":
         tensor_parallel_size = 1
 
-    # ✅ KEY: match LSF workers
     concurrency = lsf_cfg["num_workers"]
 
     if cpu_only:
@@ -237,27 +228,13 @@ def main():
         num_gpus_per_task = tensor_parallel_size
         num_cpus_per_task = cpus_per_worker
 
-    # ✅ Validation
-    if not cpu_only:
-        required_gpus = concurrency * tensor_parallel_size
-        if required_gpus > num_gpus:
-            raise RuntimeError(
-                f"Not enough GPUs: required={required_gpus}, available={num_gpus}"
-            )
-
     logger.info("=== Execution Plan ===")
-    logger.info(f"LSF workers: {lsf_cfg['num_workers']}")
-    logger.info(f"Concurrency: {concurrency}")
-    logger.info(f"CPUs per task: {num_cpus_per_task}")
-    logger.info(f"GPUs per task: {num_gpus_per_task}")
+    logger.info(f"Workers: {concurrency}")
+    logger.info(f"CPUs/task: {num_cpus_per_task}")
+    logger.info(f"GPUs/task: {num_gpus_per_task}")
 
-    # --------------------------------------------
     # Run pipeline
-    # --------------------------------------------
     batch_size = exec_cfg["batch_size"]
-
-    if batch_size > 1024:
-        logger.warning(f"Large batch_size={batch_size} may cause OOM")
 
     inference = VLLMInference(config)
 
@@ -269,38 +246,26 @@ def main():
         concurrency=concurrency,
     )
 
-    # --------------------------------------------
-    # Write output
-    # --------------------------------------------
+    # Output
     output_dir = Path(resolve_path(config["data"]["output_dir"]))
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Copy config file to output directory
-    shutil.copy(args.config, output_dir / "config.yaml")
-    logger.info(f"Config file copied to {output_dir / 'config.yaml'}")
-    
-    # Write results
-    # Ray Data writes to a directory with partitioned files
-    temp_output_dir = output_dir / "results_temp"
-    logger.info(f"Writing results to temporary directory {temp_output_dir}")
-    ds.write_json(str(temp_output_dir))
-    
-    # Consolidate partitioned files into a single JSONL file
-    output_path = output_dir / "results.jsonl"
-    logger.info(f"Consolidating results into {output_path}")
-    
-    import glob
-    with open(output_path, 'w') as outfile:
-        for json_file in sorted(glob.glob(str(temp_output_dir / "*.json"))):
-            with open(json_file, 'r') as infile:
-                outfile.write(infile.read())
-    
-    # Clean up temporary directory
-    import shutil as shutil_module
-    shutil_module.rmtree(temp_output_dir)
-    logger.info(f"Removed temporary directory {temp_output_dir}")
 
-    logger.info("=== Inference Complete ===")
+    shutil.copy(args.config, output_dir / "config.yaml")
+    logger.info(f"Config copied to {output_dir / 'config.yaml'}")
+
+    temp_output_dir = output_dir / "results_temp"
+    ds.write_json(str(temp_output_dir))
+
+    output_path = output_dir / "results.jsonl"
+
+    import glob
+    with open(output_path, "w") as outfile:
+        for f in sorted(glob.glob(str(temp_output_dir / "*.json"))):
+            with open(f, "r") as infile:
+                outfile.write(infile.read())
+
+    shutil.rmtree(temp_output_dir)
+
     logger.info(f"Results saved to {output_path}")
 
     ray.shutdown()
