@@ -128,54 +128,14 @@ trap cleanup EXIT
 # --------------------------------------------
 # Start Ray cluster
 # --------------------------------------------
-echo "=== Starting Ray cluster ==="
-
 # Optional object store config
 [[ -n "${RAY_OBJ_STORE:-}" ]] && export RAY_OBJECT_STORE_MEMORY_BYTES="${RAY_OBJ_STORE}"
 
-# IMPORTANT: limit CPUs per node
-RAY_CPUS="${CPUS_PER_WORKER:-1}"
+# Use the LSF-native start_ray_cluster.sh script
+source "${SCRIPT_DIR}/start_ray_cluster.sh"
 
-# Determine nodes via rankfile
-RANKFILE="${LSB_DJOB_RANKFILE:-}"
-
-if [[ -z "${RANKFILE}" || ! -f "${RANKFILE}" ]]; then
-  echo "ERROR: LSB_DJOB_RANKFILE not found"
-  exit 1
-fi
-
-mapfile -t HOSTS < "${RANKFILE}"
-
-HEAD_NODE="${HOSTS[0]}"
-
-echo "Head node: ${HEAD_NODE}"
-echo "Workers: ${#HOSTS[@]}"
-
-PORT=6379
-
-if [[ "${DRY_RUN:-false}" == "true" ]]; then
-  echo "[DRY RUN] Would start Ray cluster"
-else
-  # Start head
-  ssh "${HEAD_NODE}" "
-    ray start --head \
-      --port=${PORT} \
-      --num-cpus=${RAY_CPUS}
-  "
-
-  # Start workers
-  for host in "${HOSTS[@]:1}"; do
-    ssh "${host}" "
-      ray start --address=${HEAD_NODE}:${PORT} \
-        --num-cpus=${RAY_CPUS}
-    "
-  done
-fi
-
-RAY_ADDRESS="${HEAD_NODE}:${PORT}"
+# RAY_ADDRESS is set by start_ray_cluster.sh
 export RAY_ADDRESS
-
-echo "Ray cluster ready: ${RAY_ADDRESS}"
 
 # --------------------------------------------
 # Environment
