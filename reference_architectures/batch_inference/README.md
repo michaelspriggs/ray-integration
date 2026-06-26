@@ -1,421 +1,1240 @@
-# 🚀 Batch Inference with Ray + vLLM on LSF
+# Ray on LSF: Batch Inference Reference Architectures
 
-This reference architecture demonstrates distributed batch inference for large language models using:
+## 1. Introduction
 
-- Ray 2.x for distributed execution  
-- vLLM for high-performance inference  
-- LSF (IBM Spectrum Computing) for cluster resource management  
+This reference architecture demonstrates how to perform **scalable batch inference on an LSF-managed cluster using Ray**. It is designed to bridge the gap between traditional HPC schedulers (LSF) and modern distributed execution frameworks (Ray), enabling users to efficiently run large inference workloads across multiple hosts.
 
-It supports multiple Ray execution models while maintaining a **consistent and explicit resource model**.
+The goal of this project is to provide a **clean, reproducible template** for deploying inference workloads that:
 
----
-
-# 🧠 Architecture Overview
-
-## Core Resource Model
-
-This system is built around a simple, deterministic model:
-
-    1 LSF task = 1 Ray worker
-
-Each worker is allocated:
-
-    - gpus_per_worker GPUs
-    - memory_per_worker memory
-    - cpus_per_worker CPUs (enforced by Ray)
+- Scale across **multiple nodes and GPUs**
+- Support both **high-throughput (scale-out)** and **large-model (scale-up)** execution patterns
+- Integrate naturally with **LSF resource allocation**
+- Leverage Ray for **distributed scheduling and orchestration**
 
 ---
 
-## Resource Mapping
+### Key Concepts
 
-| Layer | Responsibility |
-|------|----------------|
-| LSF | Allocates CPUs, GPUs, and memory |
-| Ray | Schedules distributed execution |
-| Workload | Consumes resources |
+This architecture follows a simple and well-defined separation of responsibilities:
 
----
-
-## Total Resources
-
-    Total GPUs = num_workers × gpus_per_worker
-
-If using tensor parallelism:
-
-    GPUs per worker = tensor_parallel_size
-
-Constraint:
-
-    num_workers × tensor_parallel_size ≤ total GPUs
+- **LSF**: Allocates compute resources (CPUs, GPUs, memory) across the cluster  
+- **Ray**: Builds a distributed execution layer on top of those resources  
+- **Workloads**: Define how inference is performed (actors or Ray Data)
 
 ---
 
-# ⚙️ Execution Flow
+### What This Reference Provides
 
-    submit_lsf.sh (batch_inference/)
-        ↓
-    common/run.sh
-        ↓
-    common/start_ray_cluster.sh
-        ↓
-    Ray cluster starts
-        ↓
-    workload.py OR workload_actors.py runs
-        ↓
-    common/stop_ray_cluster.sh (automatic cleanup)
+This repository includes:
+
+- Predefined **batch inference workloads**
+- A flexible **YAML-based configuration system**
+- Scripts to **submit and run jobs on LSF**
+- Support for both:
+  - **Actor-based execution** (many independent workers)
+  - **Ray Data pipelines** (parallel batch processing)
 
 ---
 
-# 📦 Configuration
+### When to Use This Architecture
 
-All behavior is controlled via `config.yaml`.
+This approach is particularly useful when:
 
----
-
-## LSF (Resource Allocation)
-
-```yaml
-lsf:
-  num_workers: 8
-  gpus_per_worker: 1
-  memory_per_worker: "8GB"
-  restrict_to_single_host: false
-  queue: "normal"              # Optional: LSF queue name
-  interactive: false           # Set to true for interactive debugging
-```
-
-**Note:** For interactive mode, remove or comment out the `queue` field to use the interactive queue.
+- Running **large-scale inference jobs** over datasets  
+- Deploying **LLMs or transformer models** across multiple GPUs  
+- Moving from **single-node inference** to distributed execution  
+- Integrating Ray into an **existing LSF-based HPC environment**  
 
 ---
 
-## Execution (Workload Behavior)
+### Design Philosophy
 
-```yaml
-execution:
-  mode: "actors"        # or "ray_data"
-  num_workers: "auto"   # uses lsf.num_workers
-  cpus_per_worker: 4
-  device: "gpu"         # gpu | cpu
-  batch_size: 16
-```
+The architecture is built around a few core principles:
+
+- **Separation of concerns**: LSF handles allocation, Ray handles execution  
+- **Configurability**: All behavior is driven via YAML configuration  
+- **Portability**: Works across clusters with different capabilities (with or without CPU affinity)  
+- **Scalability**: Supports both horizontal and vertical scaling  
 
 ---
 
-## Model
+This document walks through how to configure, run, and understand batch inference workloads using this model, starting with prerequisites and progressing through execution details.
 
-```yaml
-model:
-  name: "ibm-granite/granite-3b-code-base"
-  tensor_parallel_size: 1
-```
+## 2. Prerequisites
 
----
+## 2. Prerequisites
 
-## Data
-
-```yaml
-data:
-  input_path: "{repo_root}/reference_architectures/batch_inference/dataset/sample_prompts.jsonl"
-  output_dir: "{repo_root}/outputs/batch_inference/{job_id}"
-```
-
-The `output_dir` specifies where all job artifacts will be stored:
-- `config.yaml` - Copy of the configuration file
-- `lsf.log` - LSF job output log
-- `results.jsonl` - Inference results
-
-Template variables:
-- `{repo_root}` - Replaced with repository root path
-- `{job_id}` - Replaced with LSF job ID
+Before running batch inference workloads, ensure your environment satisfies the following requirements.
 
 ---
 
-# 🧠 Choosing an Execution Model
+### 2.1 LSF Cluster Environment
 
-This architecture supports two execution models:
+You must have access to an operational **LSF (Load Sharing Facility) cluster**.
 
-- Ray Actors (`mode: actors`)
-- Ray Data (`mode: ray_data`)
+This architecture uses:
 
-Both use the same resource model, but differ in how execution is handled.
-
----
-
-## ✅ Ray Actors (`mode: actors`)
-
-Best for: Maximum control and performance tuning
-
-### Characteristics
-
-- Stateful workers (model loaded once per worker)
-- Explicit scheduling of work
-- Fine-grained control over execution
-- Manual batching and distribution
-
-### Use when
-
-- You want maximum GPU utilization
-- You need tight control over scheduling
-- You are optimizing performance
-- You need backpressure / custom logic
-
-### Trade-offs
-
-- More complex implementation
-- Manual scheduling required
+- **LSF** for resource allocation  
+- **blaunch** for launching processes across hosts  
+- **Ray** for distributed execution  
 
 ---
 
-## ✅ Ray Data (`mode: ray_data`)
+#### ✅ Required Capabilities
 
-Best for: Simplicity and large datasets
+The LSF environment must support:
 
-### Characteristics
-
-- Declarative pipeline using `map_batches`
-- Automatic batching and parallelism
-- Built-in fault tolerance
-- Handles dataset streaming
-
-### Use when
-
-- You have large datasets
-- You want minimal code
-- You prefer automatic scaling
-
-### Trade-offs
-
-- Less control over execution details
-- Harder to fine-tune performance
+- Job submission via `bsub`
+- Multi-node job allocation
+- Remote execution via `blaunch`
+- CPU and memory scheduling
+- GPU scheduling (for GPU workloads)
 
 ---
 
-## ⚖️ Comparison
+#### ✅ `res` Daemon (Required for `blaunch`)
 
-| Feature | Actors | Ray Data |
-|--------|--------|----------|
-| Control | High | Low |
-| Simplicity | Medium | High |
-| Scheduling | Manual | Automatic |
-| Fault tolerance | Manual | Built-in |
-| Best for | Optimization | Large-scale data |
+To support multi-node execution, the LSF **RES daemon (`res`) must be running on all compute nodes**.
 
----
+This enables:
 
-## ✅ Recommended Workflow
-
-- Start with Ray Data
-- Switch to Actors for performance tuning
+- Remote process execution
+- Distributed job startup
 
 ---
 
-## 🧠 Mental Model
+#### ✅ CPU Affinity (Recommended)
 
-    Ray Actors = "I control execution"
-    Ray Data   = "Ray controls execution"
+CPU affinity ensures that each worker receives a well-defined set of cores.
 
----
+Enable affinity by setting:
 
-# 🚀 Running the Example
+    AFFINITY=Y
 
-## Prerequisites
+in the `lsb.hosts` configuration:
 
-### 1. Activate Conda Environment
-
-Activate the conda environment before submitting jobs:
-
-```bash
-# Activate the appropriate environment
-conda activate ray_gpu  # or ray_cpu for CPU-only
-```
-
-This ensures PyYAML is available for config validation.
-
-### 2. HuggingFace Authentication (if required)
-
-Some models require authentication to download from HuggingFace. If your model requires a token:
-
-1. **Create a HuggingFace token** at https://huggingface.co/settings/tokens
-
-2. **Set the token as an environment variable** before submitting jobs:
-
-```bash
-export HF_TOKEN="your_huggingface_token_here"
-```
-
-Or use the `HF_HOME` variable to specify a custom cache directory with credentials:
-
-```bash
-export HF_HOME="/path/to/huggingface/cache"
-```
-
-**Important:** The environment variable must be set in your submission environment (where you run `submit_lsf.sh`), not inside the LSF job. The token will be inherited by the LSF job environment.
-
-**Models that typically require authentication:**
-- `meta-llama/*` (Llama models)
-- `ibm-granite/*` (Granite models)
-- Private or gated models
-
-**Models that do NOT require authentication:**
-- `facebook/opt-*` (OPT models)
-- `tiiuae/falcon-*` (Falcon models)
-- `EleutherAI/*` (Pythia, GPT-Neo, etc.)
-- Most public models
+    Begin Host
+    HOST_NAME MXJ   r1m     pg    ls    tmp  DISPATCH_WINDOW  AFFINITY
+    default    !    ()      ()    ()     ()     ()            (Y)
+    End Host
 
 ---
 
-## Submit to LSF
+##### Behavior
 
-The `--config` option is **required**. Configuration files are stored in the `config/` directory:
-
-```bash
-./submit_lsf.sh --config config/config.yaml
-```
-
-With a custom config file:
-
-```bash
-./submit_lsf.sh --config config/my_custom_config.yaml
-```
-
-### How it works
-
-`submit_lsf.sh` generates an LSF submission script and submits it via `bsub < script`. After successful submission:
-- The submission script is saved to `{output_dir}/submit.sh`
-- All job artifacts (config, logs, results) are stored in `{output_dir}`
+| use_affinity | cpus_per_worker |
+|-------------|----------------|
+| true        | ≥ 1            |
+| false       | must be 1      |
 
 ---
 
-## Interactive Mode (for debugging)
-
-Set `interactive: true` in your config and remove/comment out the `queue` field:
-
-```yaml
-lsf:
-  # queue: "normal"  # Comment out for interactive mode
-  interactive: true
-```
-
-Then submit:
-
-```bash
-./submit_lsf.sh --config config/debug_config.yaml
-```
-
-The job will run interactively, showing output directly in your terminal.
+> Without affinity, CPU locality is not guaranteed.
 
 ---
 
-## Run locally (debug)
+#### ✅ GPU Resource Enforcement (Recommended)
 
-You can run the workload directly using the common run script:
+To ensure correct GPU allocation and isolation:
 
-```bash
-../../common/run.sh --config config/config.yaml --workload-dir .
-```
+    LSB_RESOURCE_ENFORCE="gpu"
 
----
+This ensures:
 
-## Dry run
-
-Preview the generated LSF submission script without submitting:
-
-```bash
-./submit_lsf.sh --config config/config.yaml --dry-run
-```
-
-This displays the submission script that would be generated and submitted to LSF.
+- Jobs only use assigned GPUs
+- Proper `CUDA_VISIBLE_DEVICES` assignment
+- No GPU contention between tasks
 
 ---
 
-# ⚙️ Scripts and Files
+---
 
-| Script/File | Location | Role |
-|-------------|----------|------|
-| submit_lsf.sh | batch_inference/ | Submit job to LSF |
-| config.yaml | batch_inference/config/ | Configuration file |
-| workload_actors.py | batch_inference/ | Actor-based execution |
-| workload.py | batch_inference/ | Ray Data execution |
-| run.sh | common/ | Orchestrates execution |
-| start_ray_cluster.sh | common/ | Starts Ray cluster |
-| stop_ray_cluster.sh | common/ | Stops Ray cluster |
-| utils.py | common/ | Shared utilities |
+### 2.2 Python / Ray Environment
+
+A consistent Python environment must be available on all nodes.
+
+This repository provides a sample environment in:
+
+    sample_conda_env/
 
 ---
 
-# ⚙️ Key Design Principles
+#### ✅ Setup
 
-## ✅ Explicit Resource Model
+Create and activate the environment:
 
-- LSF controls GPUs and memory  
-- Ray controls CPU usage and scheduling  
-
----
-
-## ✅ Separation of Concerns
-
-| Layer | Responsibility |
-|------|----------------|
-| LSF | Allocation |
-| Ray | Execution |
-| Workload | Computation |
+    conda env create -f sample_conda_env/environment.yaml
+    conda activate ray
 
 ---
 
-## ✅ Deterministic Scaling
+#### ✅ Requirements
 
-- No hidden autoscaling
-- Scaling is fully controlled by LSF
+Ensure:
 
----
-
-# ⚠️ Common Pitfalls
-
-## GPU mismatch
-
-    num_workers × tensor_parallel_size > total GPUs
-
-→ causes startup failure
+- The environment is available on all compute nodes  
+- The same environment is used across all hosts  
+- `ray` is available in `PATH`  
 
 ---
 
-## Memory pressure
+#### ✅ Included Dependencies
 
-- Ensure memory_per_worker is sufficient
-- Avoid very large batch sizes
+Core:
 
----
+    ray
+    pyyaml
+    tqdm
 
-## CPU oversubscription
+Optional (depending on workload):
 
-- CPUs are enforced by Ray, not LSF
-- Set cpus_per_worker appropriately
-
----
-
-# 🧪 When to Use This Architecture
-
-Use this when:
-
-- Running large-scale batch inference
-- Using an LSF-managed cluster
-- You need explicit resource control
+    vllm          # GPU inference
+    transformers  # Hugging Face models
+    torch         # backend
 
 ---
 
-# ✅ Summary
+#### ⚠️ Notes
 
-This architecture provides:
-
-- Clear, consistent resource modeling
-- Two execution paradigms (Actors and Ray Data)
-- Scalable, production-ready design
-- Clean separation of concerns
+- GPU workloads require compatible CUDA and drivers  
+- vLLM requires GPU-enabled nodes  
+- Environment inconsistencies can cause runtime failures  
 
 ---
 
-# 💬 Final Takeaway
+With these prerequisites satisfied, you are ready to run distributed batch inference workloads.
 
-    LSF allocates resources
-    Ray executes the workload
-    The application consumes them
+## 3. Quickstart
+
+This section provides a minimal set of working examples to help you get started quickly. Choose an example based on your workload, submit the job, and verify that it runs successfully.
+
+---
+
+### Step 1 — Choose a Configuration
+
+Below are common example configurations for typical use cases.
+
+---
+
+#### 🔹 Example 1: GPU Actors (Recommended Default)
+
+High-throughput inference using one GPU per worker.
+
+    lsf:
+      num_workers: 4
+      cpus_per_worker: 2
+      gpus_per_worker: 1
+      use_affinity: true
+
+    execution:
+      mode: actors
+      device: gpu
+
+    model:
+      name: facebook/opt-1.3b
+      tensor_parallel_size: 1
+
+---
+
+**What this does:**
+
+- Launches 4 workers across the cluster  
+- Each worker loads the model independently  
+- Maximizes throughput for many small requests  
+
+**Required resources:**
+
+- 4 GPUs  
+- 8 CPUs total  
+
+---
+
+#### 🔹 Example 2: Multi-GPU Model (Ray Data)
+
+Run a larger model using multiple GPUs per task.
+
+    lsf:
+      num_workers: 2
+      cpus_per_worker: 2
+      gpus_per_worker: 2
+      use_affinity: true
+
+    execution:
+      mode: ray_data
+      device: gpu
+
+    model:
+      name: facebook/opt-1.3b
+      tensor_parallel_size: 2
+
+---
+
+**What this does:**
+
+- Each worker uses 2 GPUs  
+- Enables tensor parallelism for larger models  
+- Suitable for memory-constrained workloads  
+
+**Required resources:**
+
+- 4 GPUs total  
+- 4 CPUs total  
+
+---
+
+#### 🔹 Example 3: CPU-only Inference
+
+Run inference without GPUs.
+
+    lsf:
+      num_workers: 2
+      cpus_per_worker: 1
+      gpus_per_worker: 0
+      use_affinity: false
+
+    execution:
+      mode: actors
+      device: cpu
+
+    model:
+      name: facebook/opt-1.3b
+      tensor_parallel_size: 1
+
+---
+
+**What this does:**
+
+- Runs inference entirely on CPU  
+- Useful for environments without GPU access  
+
+**Required resources:**
+
+- 2 CPUs  
+
+---
+
+#### 🔹 Example 4: No Affinity (Portable Mode)
+
+For clusters where CPU affinity is not enabled.
+
+    lsf:
+      num_workers: 2
+      cpus_per_worker: 1
+      gpus_per_worker: 1
+      use_affinity: false
+
+    execution:
+      mode: actors
+      device: gpu
+
+    model:
+      tensor_parallel_size: 1
+
+---
+
+**What this does:**
+
+- Works on clusters without CPU affinity support  
+- Uses minimal CPU allocation per worker  
+
+**Required resources:**
+
+- 2 GPUs  
+- 2 CPUs  
+
+---
+
+### Step 2 — Submit the Job
+
+Run:
+
+    ./submit_lsf.sh --config path/to/config.yaml
+
+---
+
+### Step 3 — (Optional) Preview Before Submitting
+
+To validate the configuration without submitting:
+
+    ./submit_lsf.sh --config path/to/config.yaml --dry-run
+
+---
+
+### Step 4 — Monitor the Job
+
+Use standard LSF commands:
+
+    bjobs
+    bpeek <job_id>
+
+---
+
+### Step 5 — Verify Output
+
+During execution, the system will:
+
+- Start a Ray cluster across allocated hosts  
+- Initialize workers  
+- Run inference tasks  
+- Write outputs to the configured output directory  
+
+---
+
+### ✅ Next Steps
+
+Once you have successfully run a basic example:
+
+- Modify configurations for your workload  
+- Explore execution modes (Actors vs Ray Data)  
+- Tune resource parameters for performance  
+
+---
+
+If you are unsure which configuration to use:
+
+- Use **Actors mode** for most workloads  
+- Use **Ray Data mode** for multi-GPU models (TP > 1)  
+
+## 4. Architecture
+
+This reference architecture combines **LSF for resource allocation** with **Ray for distributed execution**, creating a clean separation between infrastructure management and workload execution.
+
+---
+
+### 🧠 High-Level Architecture
+
+The system is composed of three primary layers:
+
+    LSF → Resource Allocation Layer
+    Ray → Distributed Execution Layer
+    Workload → Inference Logic Layer
+
+---
+
+### 4.1 LSF: Resource Allocation
+
+LSF is responsible for **allocating compute resources across the cluster**.
+
+Each submitted job requests:
+
+- A number of workers (`num_workers`)
+- CPU cores per worker (`cpus_per_worker`)
+- GPUs per worker (`gpus_per_worker`)
+- Memory per worker (`memory_per_worker`)
+
+---
+
+#### ✅ Task-Based Resource Model
+
+This architecture uses a **task-oriented scheduling model**:
+
+    1 LSF task = 1 resource bundle
+
+        CPUs = cpus_per_worker  
+        GPUs = gpus_per_worker  
+
+---
+
+LSF assigns these tasks across available hosts. A single host may receive multiple tasks depending on resource availability.
+
+---
+
+#### ✅ Multi-Host Execution
+
+Once resources are allocated:
+
+- The primary process runs on the first execution host  
+- Additional processes are launched on other hosts using:
+
+    blaunch
+
+This enables the system to:
+
+- Start distributed processes across nodes  
+- Build a multi-node Ray cluster  
+
+---
+
+---
+
+### 4.2 Ray: Distributed Execution
+
+Ray runs on top of LSF-allocated resources and provides:
+
+- Distributed task scheduling  
+- Actor lifecycle management  
+- Resource-aware placement  
+
+---
+
+#### ✅ One Ray Node per Host
+
+Each host in the allocation runs exactly one Ray node:
+
+    host → 1 Ray node
+
+---
+
+Ray aggregates all resources visible on that host:
+
+- All CPUs allocated to the job  
+- All GPUs assigned via LSF  
+
+---
+
+#### ✅ Cluster Formation
+
+The Ray cluster is formed as follows:
+
+1. A **head node** is started on the primary host  
+2. Worker nodes are started on all other hosts (via `blaunch`)  
+3. Workers connect to the head node using a shared address  
+
+---
+
+#### ✅ Resource Scheduling
+
+Ray schedules work based on declared resource requirements:
+
+- Actors: `num_cpus`, `num_gpus` per actor  
+- Ray Data tasks: `num_cpus`, `num_gpus` per batch  
+
+---
+
+Ray automatically:
+
+- Assigns GPUs via `CUDA_VISIBLE_DEVICES`  
+- Packs tasks efficiently across hosts  
+- Ensures resource isolation  
+
+---
+
+---
+
+### 4.3 Workload Execution Layer
+
+The workload layer defines **how inference is executed**.
+
+Two execution models are supported:
+
+---
+
+#### ✅ Actors (Persistent Workers)
+
+    Driver → creates actors → actors process batches
+
+- Each actor loads the model once  
+- Actors remain alive for the duration of the job  
+- Ideal for high-throughput workloads  
+
+---
+
+---
+
+#### ✅ Ray Data (Distributed Pipeline)
+
+    Dataset → split into batches → processed in parallel
+
+- Work is split into dynamic tasks  
+- Tasks are scheduled across the Ray cluster  
+- Supports multi-GPU inference  
+
+---
+
+---
+
+### 4.4 End-to-End Execution Flow
+
+The full workflow proceeds as follows:
+
+---
+
+#### Step 1 — Submission
+
+    submit_lsf.sh → bsub
+
+- LSF allocates resources across hosts  
+
+---
+
+#### Step 2 — Cluster Bootstrap
+
+    run.sh
+
+- Head node starts Ray  
+- Worker nodes started via `blaunch`  
+- Ray cluster is formed  
+
+---
+
+#### Step 3 — Workload Execution
+
+    workload.py or workload_actors.py
+
+- Ray schedules tasks or actors  
+- Models are initialized  
+- Batches are processed  
+
+---
+
+#### Step 4 — Output
+
+- Results are written to the configured output directory  
+- Logs and metrics are emitted during execution  
+
+---
+
+---
+
+### 4.5 Design Principles
+
+This architecture is built on the following principles:
+
+---
+
+#### ✅ Separation of Concerns
+
+- LSF → resource allocation  
+- Ray → execution and scheduling  
+- Workload → business logic  
+
+---
+
+#### ✅ Resource Abstraction
+
+- Users specify resource requirements in config  
+- Ray maps these onto actual hardware  
+
+---
+
+#### ✅ Scalability
+
+- Scale out → increase `num_workers`  
+- Scale up → increase `gpus_per_worker`  
+
+---
+
+#### ✅ Portability
+
+- Works across clusters with or without affinity  
+- Supports CPU-only and GPU environments  
+
+---
+
+---
+
+### ✅ Summary
+
+This architecture provides a clean and scalable approach to distributed inference:
+
+- LSF allocates compute resources across the cluster  
+- Ray builds a distributed execution layer on top  
+- Workloads define how inference is executed  
+
+---
+
+This separation allows users to **scale inference workloads efficiently** while maintaining clear control over resource usage and execution behavior.
+
+## 5. Execution Modes
+
+This architecture supports two execution modes for batch inference:
+
+- **Actors mode** (`mode: actors`)
+- **Ray Data mode** (`mode: ray_data`)
+
+Each mode represents a different scaling strategy and is suited to different types of workloads.
+
+---
+
+### 5.1 Overview
+
+| Mode       | Scaling Type      | Best For                          | Multi-GPU Support |
+|-----------|------------------|-----------------------------------|-------------------|
+| actors    | scale-out        | many independent requests          | ❌ (TP = 1 only)  |
+| ray_data  | scale-out + up   | large batches, large models        | ✅ (TP > 1)       |
+
+---
+
+### 5.2 Actors Mode (`mode: actors`)
+
+Actors mode is designed for **high-throughput inference** using many independent workers.
+
+---
+
+#### ✅ Execution Model
+
+    Driver → creates actors → actors process requests
+
+- Each actor runs as a **long-lived worker**
+- Each actor loads the model once and reuses it
+- Work is distributed manually across actors
+
+---
+
+#### ✅ Resource Model
+
+Each actor:
+
+- Uses **1 GPU** (typical case)
+- Uses `cpus_per_worker` CPUs
+
+Example:
+
+    gpus_per_worker: 1
+    tensor_parallel_size: 1
+
+---
+
+#### ✅ Strengths
+
+- High throughput for many small requests  
+- Efficient model reuse (load once per actor)  
+- Predictable performance  
+- Simple mental model  
+
+---
+
+#### ⚠️ Limitations
+
+Actors mode does **not support tensor parallelism**:
+
+    tensor_parallel_size must be 1
+
+This means:
+
+- Multi-GPU models (TP > 1) are not supported  
+- Each actor must fit the model on a single GPU  
+
+---
+
+#### ✅ When to Use Actors
+
+Use actors mode when:
+
+- Running inference on many independent prompts  
+- Model fits on a single GPU  
+- Maximizing throughput is the priority  
+
+---
+
+---
+
+### 5.3 Ray Data Mode (`mode: ray_data`)
+
+Ray Data mode is designed for **large-scale batch processing** and **multi-GPU inference**.
+
+---
+
+#### ✅ Execution Model
+
+    Dataset → partitioned into batches → processed in parallel tasks
+
+- Work is broken into **independent tasks**
+- Tasks are scheduled dynamically by Ray
+- Tasks may use multiple GPUs
+
+---
+
+#### ✅ Resource Model
+
+Each task requests:
+
+- `num_gpus = gpus_per_worker`
+- `num_cpus = cpus_per_worker`
+
+Example:
+
+    gpus_per_worker: 2
+    tensor_parallel_size: 2
+
+---
+
+#### ✅ Multi-GPU Support
+
+Ray Data supports tensor parallel models:
+
+    tensor_parallel_size = gpus_per_worker
+
+- Each task gets multiple GPUs on the same host  
+- Suitable for large models that do not fit on a single GPU  
+
+---
+
+#### ✅ Strengths
+
+- Supports large models via tensor parallelism  
+- Efficient dataset processing  
+- Flexible scaling (both out and up)  
+- Better for long-running batch jobs  
+
+---
+
+#### ⚠️ Considerations
+
+- Model initialization occurs per worker process  
+- Slightly higher overhead compared to actors  
+- Requires careful tuning of batch size  
+
+---
+
+#### ✅ When to Use Ray Data
+
+Use Ray Data mode when:
+
+- Running inference over large datasets  
+- Using multi-GPU models  
+- Model does not fit on a single GPU  
+- Batch-oriented processing is desired  
+
+---
+
+---
+
+### 5.4 Choosing the Right Mode
+
+If you are unsure which mode to start with:
+
+---
+
+#### ✅ Use Actors Mode if:
+
+- You want **maximum throughput**
+- Your model fits on a single GPU
+- You are processing many independent requests
+
+---
+
+#### ✅ Use Ray Data Mode if:
+
+- You need **multi-GPU inference (TP > 1)**
+- You are processing large datasets
+- You want scalable batch processing
+
+---
+
+---
+
+### 5.5 Key Rules
+
+---
+
+#### ✅ Actors Mode
+
+    gpus_per_worker: 1
+    tensor_parallel_size: 1
+
+---
+
+#### ✅ Ray Data Mode
+
+    gpus_per_worker = tensor_parallel_size
+
+---
+
+---
+
+### ✅ Summary
+
+- **Actors mode** → many small, independent workers (scale-out)
+- **Ray Data mode** → fewer, larger tasks (scale-up + scale-out)
+
+---
+
+Choosing the correct execution mode is the most important decision when configuring your workload, as it directly impacts performance, scalability, and resource utilization.
+
+## 6. Configuration Format
+
+All behavior in this architecture is controlled via a YAML configuration file. This allows you to define resource requirements, execution mode, model settings, and data inputs in a consistent and reproducible way.
+
+---
+
+### 6.1 Top-Level Structure
+
+A typical configuration file contains the following sections:
+
+    lsf:
+    execution:
+    model:
+    data:
+
+---
+
+### 6.2 LSF Section
+
+Defines how resources are allocated by LSF.
+
+    lsf:
+      num_workers: 4
+      cpus_per_worker: 2
+      gpus_per_worker: 1
+      memory_per_worker: "8GB"
+      use_affinity: true
+      interactive: false
+
+---
+
+#### Fields
+
+- `num_workers`  
+  Number of LSF tasks (logical workers)
+
+- `cpus_per_worker`  
+  Number of CPU cores per worker  
+  If `use_affinity=false`, this must be 1
+
+- `gpus_per_worker`  
+  Number of GPUs allocated per worker
+
+- `memory_per_worker`  
+  Memory allocation per worker (LSF `rusage[mem=...]`)
+
+- `use_affinity`  
+  Enables CPU affinity (`affinity[core(N)]`)
+
+- `interactive`  
+  If true, runs job in interactive mode (`bsub -Is`)
+
+---
+
+---
+
+### 6.3 Execution Section
+
+Defines how the workload is executed.
+
+    execution:
+      mode: actors
+      device: gpu
+      batch_size: 32
+
+---
+
+#### Fields
+
+- `mode`  
+  Execution mode:
+  - `actors`
+  - `ray_data`
+
+- `device`  
+  `cpu` or `gpu`
+
+- `batch_size`  
+  Number of inputs processed per batch
+
+---
+
+---
+
+### 6.4 Model Section
+
+Defines model configuration.
+
+    model:
+      name: facebook/opt-1.3b
+      tensor_parallel_size: 1
+
+---
+
+#### Fields
+
+- `name`  
+  Model identifier
+
+- `tensor_parallel_size`  
+  Number of GPUs used per model instance
+
+---
+
+#### ✅ Constraint
+
+    tensor_parallel_size = gpus_per_worker
+
+---
+
+---
+
+### 6.5 Data Section
+
+Defines input and output locations.
+
+    data:
+      input_path: "{repo_root}/data/prompts.jsonl"
+      output_dir: "{repo_root}/outputs/{job_id}"
+
+---
+
+#### Fields
+
+- `input_path`  
+  Path to input data
+
+- `output_dir`  
+  Location for results
+
+---
+
+#### ✅ Supported templates
+
+- `{repo_root}` → repository root  
+- `{job_id}` → LSF job ID  
+
+---
+
+---
+
+### 6.6 Validation Rules
+
+The following constraints are enforced:
+
+- `cpus_per_worker = 1` when `use_affinity=false`
+- `tensor_parallel_size = gpus_per_worker`
+- `execution.device=gpu` requires `gpus_per_worker > 0`
+
+---
+
+---
+
+## 7. Running Workloads
+
+This section describes how to submit and monitor jobs.
+
+---
+
+### 7.1 Submit a Job
+
+Run:
+
+    ./submit_lsf.sh --config path/to/config.yaml
+
+---
+
+This will:
+
+- Generate a submission script  
+- Submit the job via `bsub`  
+- Launch processes across hosts  
+- Start a Ray cluster  
+- Execute the workload  
+
+---
+
+---
+
+### 7.2 Dry Run (Recommended First)
+
+To validate without submitting:
+
+    ./submit_lsf.sh --config path/to/config.yaml --dry-run
+
+---
+
+This shows:
+
+- Generated LSF directives  
+- Resource selection  
+- Execution commands  
+
+---
+
+---
+
+### 7.3 Monitor the Job
+
+Use LSF commands:
+
+    bjobs
+    bpeek <job_id>
+
+---
+
+---
+
+### 7.4 Runtime Behavior
+
+During execution:
+
+- Ray cluster is created across allocated hosts  
+- Workers are launched via `blaunch`  
+- GPUs are assigned automatically  
+- Workload runs according to selected mode  
+
+---
+
+---
+
+### 7.5 Output
+
+Outputs are written to:
+
+    data.output_dir
+
+Includes:
+
+- Model outputs  
+- Logs  
+- Intermediate results  
+
+---
+
+---
+
+### 7.6 Stopping Jobs
+
+Stop a job using:
+
+    bkill <job_id>
+
+---
+
+---
+
+## 8. Troubleshooting
+
+This section highlights common issues and how to resolve them.
+
+---
+
+### 8.1 Ray Cluster Does Not Start
+
+**Symptoms:**
+
+- Workers fail to connect  
+- Job appears stuck  
+
+---
+
+**Possible causes:**
+
+- `res` daemon not running  
+- `blaunch` failing  
+- Incorrect host allocation  
+
+---
+
+**Fix:**
+
+- Verify `res` is running on all nodes  
+- Check LSF logs (`bpeek`)  
+- Ensure multiple hosts were allocated  
+
+---
+
+---
+
+### 8.2 GPU Not Detected
+
+**Symptoms:**
+
+- Job runs on CPU instead of GPU  
+- Errors during model initialization  
+
+---
+
+**Possible causes:**
+
+- GPU not allocated by LSF  
+- GPU enforcement not enabled  
+
+---
+
+**Fix:**
+
+- Ensure:
+
+    gpus_per_worker > 0
+
+- Confirm:
+
+    LSB_RESOURCE_ENFORCE="gpu"
+
+- Check `CUDA_VISIBLE_DEVICES` in logs  
+
+---
+
+---
+
+### 8.3 Invalid Configuration Errors
+
+**Symptoms:**
+
+- Job fails immediately with validation error  
+
+---
+
+**Common issues:**
+
+- `tensor_parallel_size != gpus_per_worker`
+- `cpus_per_worker > 1` with `use_affinity=false`
+
+---
+
+**Fix:**
+
+- Adjust configuration to match required constraints  
+
+---
+
+---
+
+### 8.4 Poor Performance
+
+**Possible causes:**
+
+- Incorrect batch size  
+- CPU over/under allocation  
+- Inefficient execution mode  
+
+---
+
+**Fix:**
+
+- Increase or decrease `batch_size`  
+- Adjust `num_workers`  
+- Use actors for throughput, Ray Data for large models  
+
+---
+
+---
+
+### 8.5 Ray Scheduling Issues
+
+**Symptoms:**
+
+- Tasks not starting  
+- Actors stuck in pending  
+
+---
+
+**Possible causes:**
+
+- Insufficient resources  
+- Incorrect CPU/GPU requests  
+
+---
+
+**Fix:**
+
+- Verify resource totals:
+
+    total GPUs = num_workers × gpus_per_worker  
+    total CPUs = num_workers × cpus_per_worker  
+
+- Ensure cluster has sufficient capacity  
+
+---
+
+---
+
+### ✅ Summary
+
+Most issues fall into one of three categories:
+
+- LSF configuration issues  
+- Resource mismatches  
+- Execution mode misuse  
+
+---
+
+Carefully reviewing configuration and LSF job output will resolve the majority of problems.
+

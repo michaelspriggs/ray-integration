@@ -120,8 +120,8 @@ echo ""
 cleanup() {
   set +e
   echo ""
-  echo "Stopping Ray..."
-  ray stop || true
+  echo "=== Cleaning up Ray cluster ==="
+  "${SCRIPT_DIR}/stop_ray_cluster.sh"
 }
 trap cleanup EXIT
 

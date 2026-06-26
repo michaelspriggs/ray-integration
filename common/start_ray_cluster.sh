@@ -114,7 +114,7 @@ fi
 
 blaunch -z "$head_node" "${ray_head_cmd}" &
 
-sleep 5
+sleep 3
 
 # Wait for head
 echo "Waiting for Ray head..."
