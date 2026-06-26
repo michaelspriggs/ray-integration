@@ -22,6 +22,8 @@ This repository provides:
 
 Requires an operational LSF cluster, ideally with GPUs. Though it is possible to test CPU only inferencing, with a large slowdown. The `res` daemon should be running on all nodes of the cluster, to support launching processes with LSF's `blaunch` command.
 
+There should be a shared `$HOME` directory that is accessible from all hosts of the cluster.
+
 **Recommended:**
 
 - Enable CPU affinity:
@@ -38,15 +40,15 @@ Requires an operational LSF cluster, ideally with GPUs. Though it is possible to
 
 ### 2.2 Python / Ray Environment
 
-Use the provided environment:
+Use the provided environment to install a conda environment (as non-root user):
 
-    sample_conda_env/
+    `sample_conda_env/`
 
 Example setup:
-
+```
     conda env create -f sample_conda_env/environment.yaml
     conda activate ray
-
+```
 Ensure the environment is available on all nodes.
 
 ---
