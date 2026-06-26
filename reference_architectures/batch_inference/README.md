@@ -1,4 +1,4 @@
-# Ray on LSF: Batch Inference Reference Architecture
+# Ray on LSF: Batch-Inference Reference Architecture
 
 ## 1. Introduction
 
@@ -215,6 +215,8 @@ Requirement:
 
 ## 6. Configuration Format
 
+All workloads are configured via YAML.
+
 ### Structure
 
     lsf:
@@ -226,22 +228,46 @@ Requirement:
 
 ### LSF
 
+Defines how resources are allocated by LSF.
+
     lsf:
       num_workers: 4
       cpus_per_worker: 2
       gpus_per_worker: 1
       memory_per_worker: "8GB"
       use_affinity: true
+      interactive: false
 
-Rules:
+---
 
-- If `use_affinity=false`, then:
+#### Fields
 
-      cpus_per_worker = 1
+- `num_workers`  
+  Number of LSF tasks (logical workers)
+
+- `cpus_per_worker`  
+  CPU cores per task  
+  If `use_affinity=false`, must be 1
+
+- `gpus_per_worker`  
+  GPUs allocated per task
+
+- `memory_per_worker`  
+  Memory per task (LSF `rusage[mem=...]`)
+
+- `use_affinity`  
+  Enables CPU affinity (`affinity[core(N)]`)
+
+- `interactive`  
+  If true, runs with `bsub -Is` (interactive job)
+
+---
 
 ---
 
 ### Execution
+
+Defines how inference is executed.
 
     execution:
       mode: actors | ray_data
@@ -250,23 +276,70 @@ Rules:
 
 ---
 
+#### Fields
+
+- `mode`  
+  Execution model:
+  - `actors` → scale-out workers  
+  - `ray_data` → parallel data pipeline  
+
+- `device`  
+  `cpu` or `gpu`
+
+- `batch_size`  
+  Number of inputs processed per batch
+
+---
+
+---
+
 ### Model
+
+Defines model behavior.
 
     model:
       name: <model>
       tensor_parallel_size: N
 
-Constraint:
+---
+
+#### Fields
+
+- `name`  
+  Model identifier (e.g. Hugging Face or vLLM model)
+
+- `tensor_parallel_size`  
+  Number of GPUs per model instance
+
+---
+
+#### Constraint
 
     tensor_parallel_size = gpus_per_worker
 
 ---
 
+---
+
 ### Data
+
+Defines inputs and outputs.
 
     data:
       input_path: ...
       output_dir: ...
+
+---
+
+#### Fields
+
+- `input_path`  
+  Input dataset (JSONL)
+
+- `output_dir`  
+  Output location
+
+---
 
 Supports:
 
@@ -274,6 +347,12 @@ Supports:
 - `{job_id}`
 
 ---
+
+### Key Rules
+
+- CPU affinity disabled → `cpus_per_worker = 1`
+- GPU usage → `tensor_parallel_size = gpus_per_worker`
+- Actors mode → `tensor_parallel_size = 1`
 
 ## 7. Running Workloads
 
