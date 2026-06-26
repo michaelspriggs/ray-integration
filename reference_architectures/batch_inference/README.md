@@ -41,9 +41,9 @@ There should be a shared `$HOME` directory that is accessible from all hosts of 
 ### 2.2 Python / Ray Environment
 
 Use the provided environment to install a conda environment (as non-root user):
-
-    `sample_conda_env/`
-
+```
+    sample_conda_env/
+```
 Example setup:
 ```
     conda env create -f sample_conda_env/environment.yaml
