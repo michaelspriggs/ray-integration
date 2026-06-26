@@ -42,12 +42,12 @@ There should be a shared `$HOME` directory that is accessible from all hosts of 
 
 Use the provided environment to install a conda environment (as non-root user):
 ```
-    sample_conda_env/
+sample_conda_env/
 ```
 Example setup:
 ```
-    conda env create -f sample_conda_env/environment.yaml
-    conda activate ray
+conda env create -f sample_conda_env/environment.yaml
+conda activate ray
 ```
 Ensure the environment is available on all nodes.
 
@@ -55,78 +55,46 @@ Ensure the environment is available on all nodes.
 
 ## 3. Quickstart
 
-### Step 1 — Choose a Config
+### Step 1 — Choose a Configuration
 
-#### GPU Actors (default)
+The repository provides ready-to-use configs:
 
-    lsf:
-      num_workers: 4
-      cpus_per_worker: 2
-      gpus_per_worker: 1
-      use_affinity: true
-
-    execution:
-      mode: actors
-      device: gpu
-
-    model:
-      tensor_parallel_size: 1
-
-**Resources:** 4 GPUs, 8 CPUs  
-**Use for:** high throughput, independent requests
+| Name                         | Config File                                      | CPUs | GPUs | Use Case |
+|------------------------------|--------------------------------------------------|------|------|----------|
+| CPU (Ray Data, single host)  | cpu_ray_data_single_host.yaml                    | 1    | 0    | CPU-only inference |
+| GPU Actors (single host)     | gpu_actors_single_host.yaml                      | 4    | 1    | Baseline GPU |
+| GPU Actors (multi-host)      | gpu_actors_multi_host.yaml                       | 8    | 2    | Distributed throughput |
+| GPU Actors (interactive)     | gpu_actors_interactive.yaml                      | 4    | 2    | Debug / testing |
+| GPU Ray Data (multi-host)    | gpu_ray_data_multi_host.yaml                     | 8    | 4    | Multi-GPU models |
 
 ---
 
-#### Multi-GPU Model (Ray Data)
+If unsure, start with:
 
-    lsf:
-      num_workers: 2
-      cpus_per_worker: 2
-      gpus_per_worker: 2
-
-    execution:
-      mode: ray_data
-      device: gpu
-
-    model:
-      tensor_parallel_size: 2
-
-**Resources:** 4 GPUs, 4 CPUs  
-**Use for:** large models (TP > 1)
-
----
-
-#### No-Affinity Mode
-
-    lsf:
-      num_workers: 2
-      cpus_per_worker: 1
-      gpus_per_worker: 1
-      use_affinity: false
-
-    execution:
-      mode: actors
-      device: gpu
-
-**Resources:** 2 GPUs, 2 CPUs  
+- **gpu_actors_multi_host.yaml** → general use  
+- **gpu_ray_data_multi_host.yaml** → multi-GPU models  
 
 ---
 
 ### Step 2 — Submit
 
-    ./submit_lsf.sh --config path/to/config.yaml
+```
+./submit_lsf.sh --config path/to/config.yaml
+```
 
 Optional:
-
-    ./submit_lsf.sh --config path/to/config.yaml --dry-run
+```
+./submit_lsf.sh --config path/to/config.yaml --dry-run
+```
 
 ---
 
 ### Step 3 — Monitor
 
-    bjobs
-    bpeek <job_id>
-
+```
+bjobs
+bpeek <job_id>
+```
 ---
 
 ## 4. Architecture
