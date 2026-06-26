@@ -20,27 +20,19 @@ This repository provides:
 
 ### 2.1 LSF Cluster
 
-Requires an operational LSF cluster with:
-
-- Multi-node scheduling
-- `blaunch` support
-- CPU / memory / GPU resource allocation
-
-**Required:**
-
-- `res` daemon running on all nodes (for `blaunch`)
+Requires an operational LSF cluster, ideally with GPUs. Though it is possible to test CPU only inferencing, with a large slowdown. The `res` daemon should be running on all nodes of the cluster, to support launching processes with LSF's `blaunch` command.
 
 **Recommended:**
 
 - Enable CPU affinity:
-
-    AFFINITY=Y  (in lsb.hosts)
-
+  
+    `AFFINITY=Y`  (in `lsb.hosts`)
+  
     This is required for `cpus_per_worker > 1`.
 
-- Enable GPU enforcement:
+- Enable GPU enforcement, by setting in `lsf.conf`:
 
-    LSB_RESOURCE_ENFORCE="gpu"
+    `LSB_RESOURCE_ENFORCE="gpu"`
 
 ---
 
